@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "iOS Energy App Fullstack"
+  short_description: "从零生成 iOS+Watch 健康能量应用，含算法、UI、同步与测试。"
+  default_prompt: "Use $ios-energy-app-fullstack to generate a complete runnable iOS + watchOS HealthKit Energy app codebase with algorithm, SwiftUI UI, WatchConnectivity sync, XCTest coverage, and fixes."

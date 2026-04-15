@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "iOS HealthKit Dev"
+  short_description: "构建 SwiftUI 健康应用并读取心率、活动卡路里和睡眠数据。"
+  default_prompt: "Use $ios-healthkit-dev to build a runnable SwiftUI iOS app that reads heart rate, active calories, and sleep data from HealthKit."

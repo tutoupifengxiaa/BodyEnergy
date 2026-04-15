@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "watchOS Energy App"
+  short_description: "构建 Apple Watch 能量展示应用并通过 WatchConnectivity 同步 iPhone 数据。"
+  default_prompt: "Use $watchos-energy-app to generate complete runnable SwiftUI watchOS code that shows Energy Score, status (high/medium/low), live updates, and iPhone sync via WatchConnectivity."

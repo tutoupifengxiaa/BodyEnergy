@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "iOS Auto Test Fix"
+  short_description: "为 iOS 项目生成 XCTest、定位失败并最小化修复后复测。"
+  default_prompt: "Use $ios-auto-test-fix to add XCTest coverage, run logic tests, analyze failures, apply minimal safe fixes, and re-run tests with patch diff output."

@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "Energy Algorithm"
+  short_description: "基于 HR、HRV、RHR、睡眠和活动消耗计算 0-100 能量分。"
+  default_prompt: "Use $energy-algorithm to generate a runnable and extensible Swift Energy Score function (0-100) from HR, HRV, RHR, sleep duration, and activity burn."

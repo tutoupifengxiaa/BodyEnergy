@@ -1,0 +1,4 @@
+﻿interface:
+  display_name: "iOS Energy App Auto Dev"
+  short_description: "持续自动优化 iOS 健康能量应用，含 UI、算法、Watch 同步与测试修复。"
+  default_prompt: "Use $ios-energy-app-auto-dev to analyze, minimally improve, test, and maintain an iOS HealthKit Energy app with SwiftUI UI, recovery algorithm tuning, watch sync, and patch diffs."
