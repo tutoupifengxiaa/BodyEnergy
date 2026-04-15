@@ -39,7 +39,7 @@ final class HealthManager: HealthManaging {
 
         let types = try requiredReadTypes()
 
-        try await withCheckedThrowingContinuation { continuation in
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             healthStore.requestAuthorization(toShare: nil, read: types) { _, error in
                 if let error {
                     continuation.resume(throwing: error)
