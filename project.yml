@@ -16,6 +16,8 @@ targets:
     platform: iOS
     dependencies:
       - target: BodyEnergyWatch
+      - target: BodyEnergyWidget
+        embed: true
     sources:
       - path: BodyEnergy/App
       - path: BodyEnergy/Health
@@ -40,9 +42,6 @@ targets:
   BodyEnergyWatch:
     type: application
     platform: watchOS
-    dependencies:
-      - target: BodyEnergyWidget
-        embed: true
     sources:
       - path: BodyEnergy/Watch
       - path: BodyEnergy/Shared/Models
