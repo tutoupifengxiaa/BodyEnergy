@@ -12,21 +12,25 @@ struct WidgetMetricsSnapshot: Codable, Equatable, Sendable {
     var updatedAt: Date
 
     init(
-        energySnapshot: EnergySnapshot,
+        energyScore: Int,
+        recoveryScore: Int,
         stressScore: Int,
-        stressLevelTitle: String
+        stressLevelTitle: String,
+        updatedAt: Date
     ) {
-        self.energyScore = energySnapshot.energyScore
-        self.recoveryScore = energySnapshot.recoveryScore
+        self.energyScore = energyScore
+        self.recoveryScore = recoveryScore
         self.stressScore = stressScore
         self.stressLevelTitle = stressLevelTitle
-        self.updatedAt = energySnapshot.updatedAt
+        self.updatedAt = updatedAt
     }
 
     static let preview = WidgetMetricsSnapshot(
-        energySnapshot: .preview,
+        energyScore: 78,
+        recoveryScore: 82,
         stressScore: 38,
-        stressLevelTitle: "压力适中"
+        stressLevelTitle: "压力适中",
+        updatedAt: .now
     )
 }
 

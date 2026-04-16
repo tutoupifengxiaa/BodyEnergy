@@ -55,9 +55,11 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
         guard let stressScore else { return nil }
 
         return WidgetMetricsSnapshot(
-            energySnapshot: asSnapshot,
+            energyScore: energyScore,
+            recoveryScore: recoveryScore,
             stressScore: stressScore,
-            stressLevelTitle: stressLevelTitle ?? resolvedFallback.stressLevelTitle
+            stressLevelTitle: stressLevelTitle ?? resolvedFallback.stressLevelTitle,
+            updatedAt: updatedAt
         )
     }
 

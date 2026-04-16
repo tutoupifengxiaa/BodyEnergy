@@ -80,9 +80,11 @@ final class AppStore: ObservableObject {
 
         WidgetMetricsStore.save(
             WidgetMetricsSnapshot(
-                energySnapshot: energySnapshot,
+                energyScore: energySnapshot.energyScore,
+                recoveryScore: energySnapshot.recoveryScore,
                 stressScore: stress.score,
-                stressLevelTitle: stress.level.title
+                stressLevelTitle: stress.level.title,
+                updatedAt: energySnapshot.updatedAt
             )
         )
         #if canImport(WidgetKit)
