@@ -11,7 +11,11 @@ final class WatchEnergyViewModel: ObservableObject {
     private let manager: WatchConnectivityManager
     private var cancellables: Set<AnyCancellable> = []
 
-    init(manager: WatchConnectivityManager = WatchConnectivityManager()) {
+    init() {
+        self.init(manager: WatchConnectivityManager())
+    }
+
+    init(manager: WatchConnectivityManager) {
         self.manager = manager
 
         manager.$snapshot
