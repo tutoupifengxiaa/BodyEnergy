@@ -56,14 +56,14 @@ targets:
         CODE_SIGN_ENTITLEMENTS: BodyEnergy/Watch/BodyEnergyWatch.entitlements
 
   BodyEnergyWidget:
-    type: watchkit2-extension
+    type: app-extension
     platform: watchOS
     sources:
       - path: BodyEnergy/Widget
       - path: BodyEnergy/Shared/Models/WidgetMetricsSnapshot.swift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.watchkitapp.watchkitextension.complication
+        PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.watchkitapp.complication
         PRODUCT_NAME: BodyEnergyWidget
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: BodyEnergy/Widget/Info.plist
