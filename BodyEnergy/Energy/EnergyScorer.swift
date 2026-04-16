@@ -16,16 +16,22 @@ struct EnergyScorer {
     func computeScores(input rawInput: EnergyInput) -> EnergyScores {
         let input = sanitize(rawInput)
 
-        let sleepScore = normalizedPositive(input.sleepHours / config.baselines.targetSleepHours)
+        let sleepRatio = input.sleepHours / config.baselines.targetSleepHours
+        let sleepScore = normalizedPositive(sleepRatio)
+        let sleepDebtPenalty = normalizedInverse(sleepRatio)
         let hrvScore = normalizedPositive(input.heartRateVariabilityMS / config.baselines.targetHRV)
 
         let rhrRatio = input.restingHeartRateBPM / config.baselines.targetRestingHeartRate
         let rhrScore = normalizedInverse(rhrRatio)
 
-        let recovery = weighted(
+        let baseRecovery = weighted(
             [sleepScore, hrvScore, rhrScore],
             [config.weights.recoverySleep, config.weights.recoveryHRV, config.weights.recoveryRHR]
         )
+        let recovery = (
+            baseRecovery * 0.88 +
+            sleepDebtPenalty * 0.12
+        ).clamped(to: 0...1)
 
         let hrLoad = normalizedPositive(input.heartRateBPM / config.baselines.targetTrainingHeartRate)
         let energyLoad = normalizedPositive(input.activeEnergyKcal / config.baselines.targetActiveEnergyKcal)
@@ -34,10 +40,11 @@ struct EnergyScorer {
             [hrLoad, energyLoad],
             [config.weights.loadHeartRate, config.weights.loadActiveEnergy]
         )
+        let loadBalance = centeredScore(load, target: 0.52, tolerance: 0.24)
 
         let energy = (
             config.weights.energyRecovery * recovery +
-            config.weights.energyLoad * (1 - load)
+            config.weights.energyLoad * loadBalance
         ).clamped(to: 0...1)
 
         return EnergyScores(
@@ -65,6 +72,12 @@ struct EnergyScorer {
         sigmoid((1 - ratio) * 2.4)
     }
 
+    private func centeredScore(_ value: Double, target: Double, tolerance: Double) -> Double {
+        let distance = abs(value - target)
+        let normalizedDistance = (distance / tolerance).clamped(to: 0...1.6)
+        return (1 - normalizedDistance).clamped(to: 0...1)
+    }
+
     private func sigmoid(_ x: Double) -> Double {
         1 / (1 + exp(-x))
     }
@@ -78,17 +91,5 @@ struct EnergyScorer {
             partial + pair.0 * pair.1
         }
         return (numerator / denominator).clamped(to: 0...1)
-    }
-}
-
-private extension Double {
-    func clamped(to range: ClosedRange<Double>) -> Double {
-        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
-    }
-}
-
-private extension Int {
-    func clamped(to range: ClosedRange<Int>) -> Int {
-        Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
     }
 }

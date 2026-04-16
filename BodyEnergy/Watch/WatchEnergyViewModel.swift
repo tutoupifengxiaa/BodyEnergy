@@ -1,5 +1,6 @@
-﻿import Foundation
+import Foundation
 import Combine
+import SwiftUI
 
 @MainActor
 final class WatchEnergyViewModel: ObservableObject {
@@ -29,6 +30,21 @@ final class WatchEnergyViewModel: ObservableObject {
         manager.activate()
         manager.requestLatest()
     }
+
+    func refresh() {
+        manager.requestLatest()
+    }
+
+    var shortRecommendation: String {
+        let text = snapshot.recommendation
+        guard text.count > 72 else { return text }
+        let cutoffIndex = text.index(text.startIndex, offsetBy: 69)
+        return String(text[..<cutoffIndex]) + "..."
+    }
+
+    var updatedTimeText: String {
+        snapshot.updatedAt.formatted(date: .omitted, time: .shortened)
+    }
 }
 
 enum WatchEnergyStatus {
@@ -52,11 +68,11 @@ enum WatchEnergyStatus {
         }
     }
 
-    var colorName: String {
+    var color: Color {
         switch self {
-        case .high: return "green"
-        case .medium: return "yellow"
-        case .low: return "red"
+        case .high: return .green
+        case .medium: return .yellow
+        case .low: return .red
         }
     }
 }
