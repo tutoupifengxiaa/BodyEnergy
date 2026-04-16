@@ -4,26 +4,127 @@ struct WatchContentView: View {
     @EnvironmentObject private var viewModel: WatchEnergyViewModel
 
     var body: some View {
-        VStack(spacing: 8) {
-            headerRow
-            scoreCard
-            coachCard
-            footerRow
+        TabView {
+            overviewPage
+            metricsPage
+            workoutPage
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Color.black.opacity(0.04))
+        .tabViewStyle(.page(indexDisplayMode: .automatic))
+        .background(Color.black.opacity(0.05))
         .task {
             viewModel.onAppear()
         }
     }
 
+    private var overviewPage: some View {
+        VStack(spacing: 8) {
+            headerRow
+            scoreCard
+            hintFooter(text: "左右滑动查看数据和训练建议")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+    }
+
+    private var metricsPage: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("关键数据")
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 6) {
+                statPill(title: "电量", value: "\(viewModel.snapshot.energyScore)", tint: viewModel.status.color)
+                statPill(title: "恢复", value: "\(viewModel.snapshot.recoveryScore)", tint: .blue)
+            }
+
+            HStack(spacing: 6) {
+                statPill(title: "状态", value: viewModel.status.title, tint: viewModel.status.color)
+                statPill(title: "同步", value: syncBadgeText, tint: syncBadgeColor)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("更新时间")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Text(viewModel.updatedTimeText)
+                    .font(.footnote.weight(.semibold))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+            )
+
+            Spacer(minLength: 0)
+            hintFooter(text: viewModel.connectionNote)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+    }
+
+    private var workoutPage: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("推荐运动")
+                .font(.headline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(viewModel.recommendationTitle)
+                    .font(.footnote.weight(.semibold))
+                Text(viewModel.shortRecommendation)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .lineLimit(3)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+            )
+
+            HStack(spacing: 6) {
+                statPill(title: "时长", value: viewModel.recommendationDurationText, tint: .blue)
+                statPill(title: "强度", value: viewModel.recommendationIntensityText, tint: .orange)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Array(viewModel.compactSteps.enumerated()), id: \.offset) { index, step in
+                    HStack(alignment: .top, spacing: 6) {
+                        Text("\(index + 1)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundColor(.white)
+                            .frame(width: 16, height: 16)
+                            .background(viewModel.status.color, in: Circle())
+
+                        Text(step)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(3)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+            )
+
+            Spacer(minLength: 0)
+            hintFooter(text: "在 iPhone 端可查看完整教学")
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+    }
+
     private var headerRow: some View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
-                Text("Energy")
+                Text("身体电量")
                     .font(.headline)
-                Text("Updated \(viewModel.updatedTimeText)")
+                Text("更新于 \(viewModel.updatedTimeText)")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
@@ -63,8 +164,8 @@ struct WatchContentView: View {
             .frame(width: 92, height: 92)
 
             HStack(spacing: 6) {
-                statPill(title: "Recovery", value: "\(viewModel.snapshot.recoveryScore)", tint: .blue)
-                statPill(title: "Sync", value: syncBadgeText, tint: syncBadgeColor)
+                statPill(title: "恢复", value: "\(viewModel.snapshot.recoveryScore)", tint: .blue)
+                statPill(title: "同步", value: syncBadgeText, tint: syncBadgeColor)
             }
         }
         .frame(maxWidth: .infinity)
@@ -75,50 +176,26 @@ struct WatchContentView: View {
         )
     }
 
-    private var coachCard: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Label("Coach", systemImage: "figure.walk")
-                .font(.caption.weight(.semibold))
-                .foregroundColor(.secondary)
-
-            Text(viewModel.shortRecommendation)
-                .font(.footnote)
-                .lineLimit(3)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.06))
-        )
-    }
-
-    private var footerRow: some View {
-        Text(viewModel.connectionNote)
-            .font(.caption2)
-            .foregroundColor(.secondary)
-            .multilineTextAlignment(.center)
-            .lineLimit(2)
-    }
-
     private var syncBadgeText: String {
-        if viewModel.connectionNote.localizedCaseInsensitiveContains("error") {
-            return "Issue"
+        switch viewModel.syncBadge {
+        case .waiting:
+            return "等待"
+        case .active:
+            return "实时"
+        case .error:
+            return "异常"
         }
-        if viewModel.connectionNote.localizedCaseInsensitiveContains("wait") {
-            return "Wait"
-        }
-        return "Live"
     }
 
     private var syncBadgeColor: Color {
-        if viewModel.connectionNote.localizedCaseInsensitiveContains("error") {
+        switch viewModel.syncBadge {
+        case .waiting:
+            return .gray
+        case .active:
+            return .green
+        case .error:
             return .orange
         }
-        if viewModel.connectionNote.localizedCaseInsensitiveContains("wait") {
-            return .gray
-        }
-        return .green
     }
 
     private func statPill(title: String, value: String, tint: Color) -> some View {
@@ -129,6 +206,8 @@ struct WatchContentView: View {
             Text(value)
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundColor(tint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
@@ -136,6 +215,15 @@ struct WatchContentView: View {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(tint.opacity(0.12))
         )
+    }
+
+    private func hintFooter(text: String) -> some View {
+        Text(text)
+            .font(.caption2)
+            .foregroundColor(.secondary)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .frame(maxWidth: .infinity)
     }
 }
 

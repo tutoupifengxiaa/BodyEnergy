@@ -1,11 +1,21 @@
-﻿import Foundation
+import Foundation
 
 protocol WatchSyncPublishing {
-    func publish(snapshot: EnergySnapshot)
+    func publish(
+        snapshot: EnergySnapshot,
+        workoutRecommendation: WorkoutRecommendation,
+        stressScore: Int,
+        stressLevelTitle: String
+    )
 }
 
 struct NoopWatchSyncPublisher: WatchSyncPublishing {
-    func publish(snapshot: EnergySnapshot) {}
+    func publish(
+        snapshot: EnergySnapshot,
+        workoutRecommendation: WorkoutRecommendation,
+        stressScore: Int,
+        stressLevelTitle: String
+    ) {}
 }
 
 #if os(iOS)
@@ -26,10 +36,20 @@ final class WatchSyncPublisheriOS: NSObject, WatchSyncPublishing, WCSessionDeleg
         session?.activate()
     }
 
-    func publish(snapshot: EnergySnapshot) {
+    func publish(
+        snapshot: EnergySnapshot,
+        workoutRecommendation: WorkoutRecommendation,
+        stressScore: Int,
+        stressLevelTitle: String
+    ) {
         guard let session else { return }
         guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
-        let payload = WatchSyncPayload(snapshot: snapshot)
+        let payload = WatchSyncPayload(
+            snapshot: snapshot,
+            workoutRecommendation: workoutRecommendation,
+            stressScore: stressScore,
+            stressLevelTitle: stressLevelTitle
+        )
 
         do {
             try session.updateApplicationContext(payload.applicationContext)

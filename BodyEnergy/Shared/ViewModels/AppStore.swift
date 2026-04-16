@@ -1,14 +1,20 @@
-﻿import Foundation
+import Foundation
 import Combine
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 final class AppStore: ObservableObject {
     @Published var health: HealthSnapshot
     @Published var snapshot: EnergySnapshot
+    @Published var stressReading: StressReading
+    @Published var workoutRecommendation: WorkoutRecommendation
     @Published var isLoadingHealth = false
     @Published var healthErrorMessage: String?
 
     private let healthManager: HealthManaging
     private let scorer: EnergyScorer
+    private let stressAnalyzer: StressAnalyzer
     private let recommendationEngine: RecommendationEngine
     private let watchSyncPublisher: WatchSyncPublishing
 
@@ -17,15 +23,23 @@ final class AppStore: ObservableObject {
         snapshot: EnergySnapshot,
         healthManager: HealthManaging = HealthManager(),
         scorer: EnergyScorer = EnergyScorer(),
+        stressAnalyzer: StressAnalyzer = StressAnalyzer(),
         recommendationEngine: RecommendationEngine = RecommendationEngine(),
         watchSyncPublisher: WatchSyncPublishing = WatchSyncPublisherFactory.makeDefault()
     ) {
+        let initialStressReading = stressAnalyzer.evaluate(snapshot: health)
+
         self.health = health
         self.snapshot = snapshot
+        self.stressReading = initialStressReading
         self.healthManager = healthManager
         self.scorer = scorer
+        self.stressAnalyzer = stressAnalyzer
         self.recommendationEngine = recommendationEngine
         self.watchSyncPublisher = watchSyncPublisher
+        self.workoutRecommendation = recommendationEngine.plan(
+            for: scorer.computeScores(input: EnergyInput(snapshot: health))
+        )
     }
 
     @MainActor
@@ -51,13 +65,36 @@ final class AppStore: ObservableObject {
     func recalculateScores(from health: HealthSnapshot? = nil) {
         let source = health ?? self.health
         let scores = scorer.computeScores(input: EnergyInput(snapshot: source))
-        snapshot = EnergySnapshot(
+        let stress = stressAnalyzer.evaluate(snapshot: source)
+        let recommendation = recommendationEngine.plan(for: scores)
+        let energySnapshot = EnergySnapshot(
             energyScore: scores.energyScore,
             recoveryScore: scores.recoveryScore,
-            recommendation: recommendationEngine.recommendation(for: scores),
+            recommendation: recommendation.summary,
             updatedAt: .now
         )
-        watchSyncPublisher.publish(snapshot: snapshot)
+
+        stressReading = stress
+        workoutRecommendation = recommendation
+        snapshot = energySnapshot
+
+        WidgetMetricsStore.save(
+            WidgetMetricsSnapshot(
+                energySnapshot: energySnapshot,
+                stressScore: stress.score,
+                stressLevelTitle: stress.level.title
+            )
+        )
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadAllTimelines()
+        #endif
+
+        watchSyncPublisher.publish(
+            snapshot: energySnapshot,
+            workoutRecommendation: recommendation,
+            stressScore: stress.score,
+            stressLevelTitle: stress.level.title
+        )
     }
 
     static let preview = AppStore(
@@ -74,11 +111,11 @@ private extension AppStore {
 
         switch healthError {
         case .noData:
-            return "Using sample data until HealthKit has recent readings."
+            return "HealthKit 暂无最近数据，当前先展示示例结果。"
         case .healthDataUnavailable:
-            return "HealthKit is unavailable here. Showing sample data."
+            return "当前环境无法使用 HealthKit，正在展示示例数据。"
         case .missingType:
-            return "Some HealthKit data types are unavailable on this device."
+            return "设备缺少部分 HealthKit 数据类型，展示结果可能不完整。"
         }
     }
 }

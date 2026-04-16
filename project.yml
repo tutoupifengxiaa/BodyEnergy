@@ -29,8 +29,8 @@ targets:
         PRODUCT_NAME: BodyEnergy
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        INFOPLIST_KEY_NSHealthShareUsageDescription: Body Energy uses your health data to calculate Energy and Recovery scores.
-        INFOPLIST_KEY_NSHealthUpdateUsageDescription: Body Energy may write workout-related updates when enabled in future versions.
+        INFOPLIST_KEY_NSHealthShareUsageDescription: Body Energy 会读取你的健康数据，用于计算身体电量与恢复分数。
+        INFOPLIST_KEY_NSHealthUpdateUsageDescription: 未来版本启用相关功能后，Body Energy 可能写入与你训练相关的健康更新。
         CODE_SIGN_ENTITLEMENTS: BodyEnergy/App/BodyEnergy.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
     scheme:
@@ -40,6 +40,9 @@ targets:
   BodyEnergyWatch:
     type: application
     platform: watchOS
+    dependencies:
+      - target: BodyEnergyWidget
+        embed: true
     sources:
       - path: BodyEnergy/Watch
       - path: BodyEnergy/Shared/Models
@@ -49,6 +52,23 @@ targets:
         PRODUCT_NAME: BodyEnergyWatch
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_WKCompanionAppBundleIdentifier: com.tutoupifengxiaa.BodyEnergy
+        CODE_SIGN_ENTITLEMENTS: BodyEnergy/Watch/BodyEnergyWatch.entitlements
+
+  BodyEnergyWidget:
+    type: app-extension
+    platform: watchOS
+    sources:
+      - path: BodyEnergy/Widget
+      - path: BodyEnergy/Shared/Models/WidgetMetricsSnapshot.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.watch.widget
+        PRODUCT_NAME: BodyEnergyWidget
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: BodyEnergy/Widget/Info.plist
+        CODE_SIGN_ENTITLEMENTS: BodyEnergy/Widget/BodyEnergyWidget.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
 
   BodyEnergyTests:
     type: bundle.unit-test

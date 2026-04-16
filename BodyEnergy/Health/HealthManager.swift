@@ -14,11 +14,11 @@ enum HealthManagerError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .healthDataUnavailable:
-            return "Health data is not available on this device."
+            return "当前设备无法使用健康数据。"
         case .missingType(let identifier):
-            return "HealthKit type is unavailable: \(identifier)."
+            return "HealthKit 数据类型不可用：\(identifier)。"
         case .noData(let metric):
-            return "No HealthKit samples were found for \(metric)."
+            return "暂未读取到\(metric)的 HealthKit 数据。"
         }
     }
 }
@@ -74,7 +74,7 @@ final class HealthManager: HealthManaging {
             let activeEnergy = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned),
             let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)
         else {
-            throw HealthManagerError.missingType("Required HealthKit identifiers")
+            throw HealthManagerError.missingType("必要的 HealthKit 类型")
         }
 
         return [heartRate, hrv, restingHeartRate, activeEnergy, sleep]
@@ -83,7 +83,7 @@ final class HealthManager: HealthManaging {
     private func fetchLatestHeartRateBPM() async throws -> Double {
         let samples = try await latestQuantitySamples(identifier: .heartRate, limit: 1)
         guard let sample = samples.first else {
-            throw HealthManagerError.noData("heart rate")
+            throw HealthManagerError.noData("心率")
         }
         return sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
     }
@@ -99,7 +99,7 @@ final class HealthManager: HealthManaging {
     private func fetchLatestRestingHeartRateBPM() async throws -> Double {
         let samples = try await latestQuantitySamples(identifier: .restingHeartRate, limit: 1)
         guard let sample = samples.first else {
-            throw HealthManagerError.noData("resting heart rate")
+            throw HealthManagerError.noData("静息心率")
         }
         return sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
     }
@@ -132,7 +132,7 @@ final class HealthManager: HealthManaging {
 
         let hours = totalSeconds / 3600
         guard hours > 0 else {
-            throw HealthManagerError.noData("sleep")
+            throw HealthManagerError.noData("睡眠")
         }
         return hours
     }

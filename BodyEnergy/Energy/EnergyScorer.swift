@@ -15,44 +15,40 @@ struct EnergyScorer {
 
     func computeScores(input rawInput: EnergyInput) -> EnergyScores {
         let input = sanitize(rawInput)
-
-        let sleepRatio = input.sleepHours / config.baselines.targetSleepHours
-        let sleepScore = normalizedPositive(sleepRatio)
-        let sleepDebtPenalty = normalizedInverse(sleepRatio)
-        let hrvScore = normalizedPositive(input.heartRateVariabilityMS / config.baselines.targetHRV)
-
-        let rhrRatio = input.restingHeartRateBPM / config.baselines.targetRestingHeartRate
-        let rhrScore = normalizedInverse(rhrRatio)
-
-        let baseRecovery = weighted(
-            [sleepScore, hrvScore, rhrScore],
-            [config.weights.recoverySleep, config.weights.recoveryHRV, config.weights.recoveryRHR]
+        let recovery = recoveryScore(for: input)
+        let fatigue = fatigueScore(for: input)
+        let activityBalance = centeredScore(
+            input.activeEnergyKcal,
+            target: config.baselines.targetActiveEnergyKcal,
+            tolerance: config.baselines.activityBalanceToleranceKcal
         )
-        let recovery = (
-            baseRecovery * 0.88 +
-            sleepDebtPenalty * 0.12
-        )
-        let boundedRecovery = bounded(recovery, to: 0...1)
 
-        let hrLoad = normalizedPositive(input.heartRateBPM / config.baselines.targetTrainingHeartRate)
-        let energyLoad = normalizedPositive(input.activeEnergyKcal / config.baselines.targetActiveEnergyKcal)
-
-        let load = weighted(
-            [hrLoad, energyLoad],
-            [config.weights.loadHeartRate, config.weights.loadActiveEnergy]
+        let trainingLoad = weighted(
+            [
+                ratioScore(input.heartRateBPM, target: config.baselines.targetTrainingHeartRate, slope: 2.0),
+                ratioScore(input.activeEnergyKcal, target: config.baselines.targetActiveEnergyKcal, slope: 2.1)
+            ],
+            [
+                config.weights.trainingLoadHeartRate,
+                config.weights.trainingLoadActiveEnergy
+            ]
         )
-        let loadBalance = centeredScore(load, target: 0.52, tolerance: 0.24)
 
-        let energy = (
-            config.weights.energyRecovery * boundedRecovery +
-            config.weights.energyLoad * loadBalance
+        let readiness = weighted(
+            [recovery, 1 - fatigue, activityBalance],
+            [
+                config.weights.energyRecovery,
+                config.weights.energyFatigueResistance,
+                config.weights.energyActivityBalance
+            ]
         )
-        let boundedEnergy = bounded(energy, to: 0...1)
+        let fatiguePenalty = max(0, fatigue - recovery) * 0.18
+        let boundedEnergy = bounded(readiness - fatiguePenalty, to: 0...1)
 
         return EnergyScores(
-            recoveryScore: bounded(Int((boundedRecovery * 100).rounded()), to: 0...100),
+            recoveryScore: bounded(Int((recovery * 100).rounded()), to: 0...100),
             energyScore: bounded(Int((boundedEnergy * 100).rounded()), to: 0...100),
-            trainingLoadScore: bounded(Int((load * 100).rounded()), to: 0...100)
+            trainingLoadScore: bounded(Int((trainingLoad * 100).rounded()), to: 0...100)
         )
     }
 
@@ -66,18 +62,82 @@ struct EnergyScorer {
         )
     }
 
-    private func normalizedPositive(_ ratio: Double) -> Double {
-        sigmoid((ratio - 1) * 2.2)
+    private func recoveryScore(for input: EnergyInput) -> Double {
+        let sleepQuality = sleepScore(for: input.sleepHours)
+        let hrvScore = ratioScore(input.heartRateVariabilityMS, target: config.baselines.targetHRV, slope: 2.0)
+        let restingHeartRateScore = inverseRatioScore(
+            input.restingHeartRateBPM,
+            target: config.baselines.targetRestingHeartRate,
+            slope: 2.3
+        )
+
+        return weighted(
+            [sleepQuality, hrvScore, restingHeartRateScore],
+            [config.weights.recoverySleep, config.weights.recoveryHRV, config.weights.recoveryRHR]
+        )
     }
 
-    private func normalizedInverse(_ ratio: Double) -> Double {
-        sigmoid((1 - ratio) * 2.4)
+    private func fatigueScore(for input: EnergyInput) -> Double {
+        let sleepDebt = sleepDebtPenalty(for: input.sleepHours)
+        let heartRateReserve = max(0, input.heartRateBPM - input.restingHeartRateBPM)
+        let heartRateStrain = overloadScore(
+            heartRateReserve,
+            threshold: config.baselines.heartRateReserveBufferBPM,
+            ramp: config.baselines.heartRateReserveRampBPM
+        )
+        let activityOverload = overloadScore(
+            input.activeEnergyKcal,
+            threshold: config.baselines.overloadActiveEnergyKcal,
+            ramp: config.baselines.activityBalanceToleranceKcal
+        )
+
+        return weighted(
+            [heartRateStrain, sleepDebt, activityOverload],
+            [
+                config.weights.fatigueHeartRate,
+                config.weights.fatigueSleepDebt,
+                config.weights.fatigueActivity
+            ]
+        )
+    }
+
+    private func sleepScore(for sleepHours: Double) -> Double {
+        let durationScore = centeredScore(
+            sleepHours,
+            target: config.baselines.targetSleepHours,
+            tolerance: 2.0
+        )
+        let sleepDebt = sleepDebtPenalty(for: sleepHours)
+        return bounded(durationScore * 0.78 + (1 - sleepDebt) * 0.22, to: 0...1)
+    }
+
+    private func sleepDebtPenalty(for sleepHours: Double) -> Double {
+        let restorativeWindow = max(
+            config.baselines.targetSleepHours - config.baselines.restorativeSleepFloorHours,
+            1
+        )
+        let shortfall = max(0, config.baselines.targetSleepHours - sleepHours)
+        return bounded(shortfall / restorativeWindow, to: 0...1)
+    }
+
+    private func ratioScore(_ value: Double, target: Double, slope: Double) -> Double {
+        guard target > 0 else { return 0.5 }
+        return sigmoid(((value / target) - 1) * slope)
+    }
+
+    private func inverseRatioScore(_ value: Double, target: Double, slope: Double) -> Double {
+        guard target > 0 else { return 0.5 }
+        return sigmoid((1 - (value / target)) * slope)
     }
 
     private func centeredScore(_ value: Double, target: Double, tolerance: Double) -> Double {
         let distance = abs(value - target)
         let normalizedDistance = bounded(distance / tolerance, to: 0...1.6)
         return bounded(1 - normalizedDistance, to: 0...1)
+    }
+
+    private func overloadScore(_ value: Double, threshold: Double, ramp: Double) -> Double {
+        sigmoid((value - threshold) / max(ramp, 1))
     }
 
     private func sigmoid(_ x: Double) -> Double {

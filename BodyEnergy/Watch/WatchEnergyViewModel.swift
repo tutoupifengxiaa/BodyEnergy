@@ -5,8 +5,10 @@ import SwiftUI
 @MainActor
 final class WatchEnergyViewModel: ObservableObject {
     @Published private(set) var snapshot: EnergySnapshot = .preview
+    @Published private(set) var workoutRecommendation: WorkoutRecommendation = .preview
     @Published private(set) var status: WatchEnergyStatus = .medium
-    @Published private(set) var connectionNote: String = "Waiting for iPhone sync"
+    @Published private(set) var syncBadge: WatchSyncBadge = .waiting
+    @Published private(set) var connectionNote: String = "等待 iPhone 同步"
 
     private let manager: WatchConnectivityManager
     private var cancellables: Set<AnyCancellable> = []
@@ -26,6 +28,12 @@ final class WatchEnergyViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
+        manager.$workoutRecommendation
+            .assign(to: &$workoutRecommendation)
+
+        manager.$syncBadge
+            .assign(to: &$syncBadge)
+
         manager.$connectionNote
             .assign(to: &$connectionNote)
     }
@@ -40,10 +48,23 @@ final class WatchEnergyViewModel: ObservableObject {
     }
 
     var shortRecommendation: String {
-        let text = snapshot.recommendation
-        guard text.count > 72 else { return text }
-        let cutoffIndex = text.index(text.startIndex, offsetBy: 69)
-        return String(text[..<cutoffIndex]) + "..."
+        workoutRecommendation.summary.shortened(limit: 72)
+    }
+
+    var recommendationTitle: String {
+        workoutRecommendation.title
+    }
+
+    var recommendationDurationText: String {
+        workoutRecommendation.durationText
+    }
+
+    var recommendationIntensityText: String {
+        workoutRecommendation.intensityText
+    }
+
+    var compactSteps: [String] {
+        Array(workoutRecommendation.steps.prefix(2))
     }
 
     var updatedTimeText: String {
@@ -66,9 +87,9 @@ enum WatchEnergyStatus {
 
     var title: String {
         switch self {
-        case .high: return "High"
-        case .medium: return "Moderate"
-        case .low: return "Low"
+        case .high: return "高"
+        case .medium: return "中"
+        case .low: return "低"
         }
     }
 
@@ -78,5 +99,13 @@ enum WatchEnergyStatus {
         case .medium: return .yellow
         case .low: return .red
         }
+    }
+}
+
+private extension String {
+    func shortened(limit: Int) -> String {
+        guard count > limit else { return self }
+        let cutoffIndex = index(startIndex, offsetBy: max(limit - 3, 0))
+        return String(self[..<cutoffIndex]) + "..."
     }
 }

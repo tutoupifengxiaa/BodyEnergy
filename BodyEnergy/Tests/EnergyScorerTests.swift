@@ -69,4 +69,56 @@ final class EnergyScorerTests: XCTestCase {
         XCTAssertGreaterThan(moderateScores.energyScore, excessiveScores.energyScore)
         XCTAssertGreaterThan(excessiveScores.trainingLoadScore, moderateScores.trainingLoadScore)
     }
+
+    func testSleepDebtReducesRecoveryEvenWhenCardioMarkersMatch() {
+        let scorer = EnergyScorer()
+
+        let wellRested = EnergyInput(
+            heartRateBPM: 82,
+            heartRateVariabilityMS: 61,
+            restingHeartRateBPM: 55,
+            sleepHours: 8.1,
+            activeEnergyKcal: 680
+        )
+
+        let sleepDeprived = EnergyInput(
+            heartRateBPM: 82,
+            heartRateVariabilityMS: 61,
+            restingHeartRateBPM: 55,
+            sleepHours: 5.2,
+            activeEnergyKcal: 680
+        )
+
+        let restedScores = scorer.computeScores(input: wellRested)
+        let deprivedScores = scorer.computeScores(input: sleepDeprived)
+
+        XCTAssertGreaterThan(restedScores.recoveryScore, deprivedScores.recoveryScore)
+        XCTAssertGreaterThan(restedScores.energyScore, deprivedScores.energyScore)
+    }
+
+    func testElevatedCurrentHeartRatePenalizesEnergy() {
+        let scorer = EnergyScorer()
+
+        let calm = EnergyInput(
+            heartRateBPM: 78,
+            heartRateVariabilityMS: 58,
+            restingHeartRateBPM: 56,
+            sleepHours: 7.7,
+            activeEnergyKcal: 640
+        )
+
+        let strained = EnergyInput(
+            heartRateBPM: 132,
+            heartRateVariabilityMS: 58,
+            restingHeartRateBPM: 56,
+            sleepHours: 7.7,
+            activeEnergyKcal: 640
+        )
+
+        let calmScores = scorer.computeScores(input: calm)
+        let strainedScores = scorer.computeScores(input: strained)
+
+        XCTAssertGreaterThan(calmScores.energyScore, strainedScores.energyScore)
+        XCTAssertGreaterThan(strainedScores.trainingLoadScore, calmScores.trainingLoadScore)
+    }
 }
