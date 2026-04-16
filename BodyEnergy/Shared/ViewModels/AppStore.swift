@@ -40,7 +40,8 @@ final class AppStore: ObservableObject {
             health = latest
             recalculateScores(from: latest)
         } catch {
-            healthErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            healthErrorMessage = presentableHealthMessage(for: error)
+            recalculateScores(from: health)
         }
 
         isLoadingHealth = false
@@ -63,4 +64,21 @@ final class AppStore: ObservableObject {
         health: .baseline,
         snapshot: .preview
     )
+}
+
+private extension AppStore {
+    func presentableHealthMessage(for error: Error) -> String {
+        guard let healthError = error as? HealthManagerError else {
+            return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+
+        switch healthError {
+        case .noData:
+            return "Using sample data until HealthKit has recent readings."
+        case .healthDataUnavailable:
+            return "HealthKit is unavailable here. Showing sample data."
+        case .missingType:
+            return "Some HealthKit data types are unavailable on this device."
+        }
+    }
 }

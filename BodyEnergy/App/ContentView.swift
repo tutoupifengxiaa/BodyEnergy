@@ -28,6 +28,10 @@ struct ContentView: View {
         [-9, -6, -4, -2, 0, -1, 0].map { bounded(energyScore + $0, to: 0...100) }
     }
 
+    private var weekdayLabels: [String] {
+        ["M", "T", "W", "T", "F", "S", "S"]
+    }
+
     var body: some View {
         NavigationView {
             ScrollView {
@@ -200,7 +204,7 @@ struct ContentView: View {
                 .frame(height: 110)
 
             HStack {
-                ForEach(["M", "T", "W", "T", "F", "S", "S"], id: \.self) { day in
+                ForEach(Array(weekdayLabels.enumerated()), id: \.offset) { _, day in
                     Text(day)
                         .font(.caption2)
                         .foregroundColor(.secondary)

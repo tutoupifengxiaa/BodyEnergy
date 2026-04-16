@@ -28,6 +28,7 @@ final class WatchSyncPublisheriOS: NSObject, WatchSyncPublishing, WCSessionDeleg
 
     func publish(snapshot: EnergySnapshot) {
         guard let session else { return }
+        guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
         let payload = WatchSyncPayload(snapshot: snapshot)
 
         do {
