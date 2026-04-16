@@ -16,6 +16,7 @@ targets:
     platform: iOS
     dependencies:
       - target: BodyEnergyWatch
+        embed: true
     sources:
       - path: BodyEnergy/App
       - path: BodyEnergy/Health
