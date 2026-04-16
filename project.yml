@@ -56,7 +56,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: BodyEnergy/Watch/BodyEnergyWatch.entitlements
 
   BodyEnergyWidget:
-    type: app-extension
+    type: watchkit2-extension
     platform: watchOS
     sources:
       - path: BodyEnergy/Widget
