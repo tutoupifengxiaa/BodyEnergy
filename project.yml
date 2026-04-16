@@ -16,8 +16,6 @@ targets:
     platform: iOS
     dependencies:
       - target: BodyEnergyWatch
-      - target: BodyEnergyWidget
-        embed: true
     sources:
       - path: BodyEnergy/App
       - path: BodyEnergy/Health
@@ -42,6 +40,9 @@ targets:
   BodyEnergyWatch:
     type: application
     platform: watchOS
+    dependencies:
+      - target: BodyEnergyWidget
+        embed: true
     sources:
       - path: BodyEnergy/Watch
       - path: BodyEnergy/Shared/Models
@@ -61,7 +62,7 @@ targets:
       - path: BodyEnergy/Shared/Models/WidgetMetricsSnapshot.swift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.widget
+        PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.watchkitapp.complication
         PRODUCT_NAME: BodyEnergyWidget
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: BodyEnergy/Widget/Info.plist
