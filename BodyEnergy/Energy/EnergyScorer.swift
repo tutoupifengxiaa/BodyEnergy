@@ -31,7 +31,8 @@ struct EnergyScorer {
         let recovery = (
             baseRecovery * 0.88 +
             sleepDebtPenalty * 0.12
-        ).clamped(to: 0...1)
+        )
+        let boundedRecovery = bounded(recovery, to: 0...1)
 
         let hrLoad = normalizedPositive(input.heartRateBPM / config.baselines.targetTrainingHeartRate)
         let energyLoad = normalizedPositive(input.activeEnergyKcal / config.baselines.targetActiveEnergyKcal)
@@ -43,24 +44,25 @@ struct EnergyScorer {
         let loadBalance = centeredScore(load, target: 0.52, tolerance: 0.24)
 
         let energy = (
-            config.weights.energyRecovery * recovery +
+            config.weights.energyRecovery * boundedRecovery +
             config.weights.energyLoad * loadBalance
-        ).clamped(to: 0...1)
+        )
+        let boundedEnergy = bounded(energy, to: 0...1)
 
         return EnergyScores(
-            recoveryScore: Int((recovery * 100).rounded()).clamped(to: 0...100),
-            energyScore: Int((energy * 100).rounded()).clamped(to: 0...100),
-            trainingLoadScore: Int((load * 100).rounded()).clamped(to: 0...100)
+            recoveryScore: bounded(Int((boundedRecovery * 100).rounded()), to: 0...100),
+            energyScore: bounded(Int((boundedEnergy * 100).rounded()), to: 0...100),
+            trainingLoadScore: bounded(Int((load * 100).rounded()), to: 0...100)
         )
     }
 
     private func sanitize(_ input: EnergyInput) -> EnergyInput {
         EnergyInput(
-            heartRateBPM: input.heartRateBPM.clamped(to: config.heartRateValidRange),
-            heartRateVariabilityMS: input.heartRateVariabilityMS.clamped(to: config.hrvValidRange),
-            restingHeartRateBPM: input.restingHeartRateBPM.clamped(to: config.restingHeartRateValidRange),
-            sleepHours: input.sleepHours.clamped(to: config.sleepValidRange),
-            activeEnergyKcal: input.activeEnergyKcal.clamped(to: config.activeEnergyValidRange)
+            heartRateBPM: bounded(input.heartRateBPM, to: config.heartRateValidRange),
+            heartRateVariabilityMS: bounded(input.heartRateVariabilityMS, to: config.hrvValidRange),
+            restingHeartRateBPM: bounded(input.restingHeartRateBPM, to: config.restingHeartRateValidRange),
+            sleepHours: bounded(input.sleepHours, to: config.sleepValidRange),
+            activeEnergyKcal: bounded(input.activeEnergyKcal, to: config.activeEnergyValidRange)
         )
     }
 
@@ -74,8 +76,8 @@ struct EnergyScorer {
 
     private func centeredScore(_ value: Double, target: Double, tolerance: Double) -> Double {
         let distance = abs(value - target)
-        let normalizedDistance = (distance / tolerance).clamped(to: 0...1.6)
-        return (1 - normalizedDistance).clamped(to: 0...1)
+        let normalizedDistance = bounded(distance / tolerance, to: 0...1.6)
+        return bounded(1 - normalizedDistance, to: 0...1)
     }
 
     private func sigmoid(_ x: Double) -> Double {
@@ -90,6 +92,14 @@ struct EnergyScorer {
         let numerator = zip(values, weights).reduce(0.0) { partial, pair in
             partial + pair.0 * pair.1
         }
-        return (numerator / denominator).clamped(to: 0...1)
+        return bounded(numerator / denominator, to: 0...1)
     }
+}
+
+private func bounded(_ value: Double, to range: ClosedRange<Double>) -> Double {
+    Swift.min(Swift.max(value, range.lowerBound), range.upperBound)
+}
+
+private func bounded(_ value: Int, to range: ClosedRange<Int>) -> Int {
+    Swift.min(Swift.max(value, range.lowerBound), range.upperBound)
 }

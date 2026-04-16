@@ -5,11 +5,11 @@ struct ContentView: View {
     @EnvironmentObject private var store: AppStore
 
     private var energyScore: Int {
-        store.snapshot.energyScore.clamped(to: 0...100)
+        bounded(store.snapshot.energyScore, to: 0...100)
     }
 
     private var recoveryScore: Int {
-        store.snapshot.recoveryScore.clamped(to: 0...100)
+        bounded(store.snapshot.recoveryScore, to: 0...100)
     }
 
     private var energyProgress: CGFloat {
@@ -25,7 +25,7 @@ struct ContentView: View {
     }
 
     private var trendPoints: [Int] {
-        [-9, -6, -4, -2, 0, -1, 0].map { (energyScore + $0).clamped(to: 0...100) }
+        [-9, -6, -4, -2, 0, -1, 0].map { bounded(energyScore + $0, to: 0...100) }
     }
 
     var body: some View {
@@ -327,6 +327,10 @@ private enum EnergyStatus {
         case .low: return .red
         }
     }
+}
+
+private func bounded(_ value: Int, to range: ClosedRange<Int>) -> Int {
+    Swift.min(Swift.max(value, range.lowerBound), range.upperBound)
 }
 
 struct ContentView_Previews: PreviewProvider {
