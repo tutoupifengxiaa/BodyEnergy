@@ -6,6 +6,11 @@
   <string>BodyEnergyWidget</string>
   <key>NSExtension</key>
   <dict>
+    <key>NSExtensionAttributes</key>
+    <dict>
+      <key>WKAppBundleIdentifier</key>
+      <string>com.tutoupifengxiaa.BodyEnergy.watchkitapp</string>
+    </dict>
     <key>NSExtensionPointIdentifier</key>
     <string>com.apple.widgetkit-extension</string>
   </dict>
