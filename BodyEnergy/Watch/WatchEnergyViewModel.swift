@@ -75,6 +75,28 @@ final class WatchEnergyViewModel: ObservableObject {
         snapshot.updatedAt.formatted(date: .omitted, time: .shortened)
     }
 
+    var syncStatusTitle: String {
+        switch syncBadge {
+        case .waiting:
+            return "等待手机数据"
+        case .active:
+            return "已同步"
+        case .error:
+            return "同步异常"
+        }
+    }
+
+    var syncStatusDetail: String {
+        switch syncBadge {
+        case .waiting:
+            return connectionNote
+        case .active:
+            return "上次更新 \(updatedTimeText)"
+        case .error:
+            return connectionNote
+        }
+    }
+
     var metricCards: [WatchMetricCard] {
         [
             WatchMetricCard(

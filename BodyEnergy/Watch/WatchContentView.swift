@@ -110,13 +110,17 @@ struct WatchContentView: View {
     }
 
     private var headerRow: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 1) {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
                 Text("身体电量")
                     .font(.headline)
-                Text("更新于 \(viewModel.updatedTimeText)")
+                Text(viewModel.syncStatusTitle)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundColor(syncBadgeColor)
+                Text(viewModel.syncStatusDetail)
                     .font(.caption2)
                     .foregroundColor(.secondary)
+                    .lineLimit(2)
             }
 
             Spacer()
