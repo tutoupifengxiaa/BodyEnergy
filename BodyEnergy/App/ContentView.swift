@@ -74,8 +74,10 @@ struct ContentView: View {
                     await store.refreshHealthData()
                 }
             }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-            .background(pageBackground)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background {
+                pageBackground.ignoresSafeArea()
+            }
         }
         .ignoresSafeArea()
         .fullScreenCover(isPresented: $isShowingRecommendationDetail) {
