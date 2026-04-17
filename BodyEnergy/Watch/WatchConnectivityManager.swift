@@ -11,6 +11,9 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
     @Published private(set) var metrics: WatchKeyMetricsSnapshot = .preview
     @Published private(set) var syncBadge: WatchSyncBadge = .waiting
     @Published private(set) var connectionNote: String = "等待 iPhone 同步"
+    @Published private(set) var sampleScenarioTitle: String?
+    @Published private(set) var sampleScenarioSummary: String?
+    @Published private(set) var bodyStatus: BodyStatusDescriptor = .make(energyScore: EnergySnapshot.preview.energyScore)
 
     private let session: WCSession?
 
@@ -40,7 +43,7 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         guard let session else { return }
 
         if let payload = WatchSyncPayload(applicationContext: session.receivedApplicationContext) {
-            apply(payload, note: "已同步", syncBadge: .active)
+            apply(payload, note: "已接收 iPhone 同步", syncBadge: .active)
         }
 
         guard session.activationState == .activated, session.isReachable else { return }
@@ -57,16 +60,16 @@ extension WatchConnectivityManager: WCSessionDelegate {
         Task { @MainActor in
             if let error {
                 syncBadge = .error
-                connectionNote = "同步错误：\(error.localizedDescription)"
+                connectionNote = "同步失败：\(error.localizedDescription)"
                 return
             }
 
             if activationState == .activated {
                 syncBadge = .active
                 if let payload = WatchSyncPayload(applicationContext: session.receivedApplicationContext) {
-                    apply(payload, note: "已同步", syncBadge: .active)
+                    apply(payload, note: "已接收 iPhone 同步", syncBadge: .active)
                 } else {
-                    connectionNote = "已连接，等待数据"
+                    connectionNote = "已连接，等待 iPhone 发送数据"
                 }
                 requestLatest()
             } else {
@@ -81,7 +84,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
         Task { @MainActor in
             apply(
                 payload,
-                note: "已更新 \(payload.updatedAt.formatted(date: .omitted, time: .shortened))",
+                note: "最近更新 \(payload.updatedAt.formatted(date: .omitted, time: .shortened))",
                 syncBadge: .active
             )
         }
@@ -90,7 +93,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
     nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         guard let payload = WatchSyncPayload(applicationContext: message) else { return }
         Task { @MainActor in
-            apply(payload, note: "实时更新", syncBadge: .active)
+            apply(payload, note: "刚刚从 iPhone 实时更新", syncBadge: .active)
         }
     }
 }
@@ -102,6 +105,13 @@ private extension WatchConnectivityManager {
         if let metrics = payload.metrics {
             self.metrics = metrics
         }
+        if let bodyStatus = payload.bodyStatus {
+            self.bodyStatus = bodyStatus
+        } else {
+            self.bodyStatus = .make(energyScore: payload.energyScore)
+        }
+        sampleScenarioTitle = payload.sampleScenarioTitle
+        sampleScenarioSummary = payload.sampleScenarioSummary
         self.syncBadge = syncBadge
         connectionNote = note
 

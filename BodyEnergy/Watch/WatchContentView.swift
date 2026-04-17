@@ -21,8 +21,23 @@ struct WatchContentView: View {
             VStack(spacing: 8) {
                 headerRow
                 scoreCard
-                sectionCard(title: "今日状态", subtitle: overviewSummary)
-                hintFooter(text: "左右滑动切页，旋转表冠继续浏览")
+
+                if let sampleScenarioTitle = viewModel.sampleScenarioTitle {
+                    sectionCard(
+                        title: "当前场景",
+                        subtitle: sampleScenarioTitle,
+                        detail: viewModel.sampleScenarioSummary ?? "当前正在展示来自 iPhone 的示例状态。"
+                    )
+                }
+
+                sectionCard(
+                    title: "身体状态提示",
+                    subtitle: viewModel.bodyStatus.title,
+                    detail: viewModel.bodyStatus.detail
+                )
+
+                actionCard
+                hintFooter(text: "左右滑动切页，旋转表冠继续浏览。")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -45,7 +60,7 @@ struct WatchContentView: View {
                     }
                 }
 
-                hintFooter(text: viewModel.connectionNote)
+                hintFooter(text: viewModel.syncStatusDetail)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -102,7 +117,7 @@ struct WatchContentView: View {
                         .fill(Color.white.opacity(0.06))
                 )
 
-                hintFooter(text: "在 iPhone 端可查看完整训练详情")
+                hintFooter(text: "完整训练建议可在 iPhone 端继续查看。")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
@@ -120,7 +135,7 @@ struct WatchContentView: View {
                 Text(viewModel.syncStatusDetail)
                     .font(.caption2)
                     .foregroundColor(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
             }
 
             Spacer()
@@ -170,15 +185,21 @@ struct WatchContentView: View {
         )
     }
 
-    private var overviewSummary: String {
-        switch viewModel.status {
-        case .high:
-            return "状态在线，适合安排更完整的训练。"
-        case .medium:
-            return "整体平稳，保持中等强度更容易持续。"
-        case .low:
-            return "当前更需要恢复，建议轻活动和休息。"
+    private var actionCard: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("当前建议")
+                .font(.footnote.weight(.semibold))
+            Text(viewModel.bodyStatus.action)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .lineLimit(4)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(bodyStatusColor.opacity(0.14))
+        )
     }
 
     private var syncBadgeText: String {
@@ -186,7 +207,7 @@ struct WatchContentView: View {
         case .waiting:
             return "等待"
         case .active:
-            return "实时"
+            return "已连通"
         case .error:
             return "异常"
         }
@@ -200,6 +221,17 @@ struct WatchContentView: View {
             return .green
         case .error:
             return .orange
+        }
+    }
+
+    private var bodyStatusColor: Color {
+        switch viewModel.bodyStatus.state {
+        case .high:
+            return .green
+        case .medium:
+            return .orange
+        case .low:
+            return .red
         }
     }
 
@@ -222,14 +254,17 @@ struct WatchContentView: View {
         )
     }
 
-    private func sectionCard(title: String, subtitle: String) -> some View {
+    private func sectionCard(title: String, subtitle: String, detail: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.footnote.weight(.semibold))
             Text(subtitle)
+                .font(.caption.weight(.semibold))
+                .foregroundColor(bodyStatusColor)
+            Text(detail)
                 .font(.caption2)
                 .foregroundColor(.secondary)
-                .lineLimit(4)
+                .lineLimit(5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)

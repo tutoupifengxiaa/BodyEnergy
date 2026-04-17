@@ -6,7 +6,10 @@ protocol WatchSyncPublishing {
         workoutRecommendation: WorkoutRecommendation,
         metrics: WatchKeyMetricsSnapshot,
         stressScore: Int,
-        stressLevelTitle: String
+        stressLevelTitle: String,
+        sampleScenarioTitle: String?,
+        sampleScenarioSummary: String?,
+        bodyStatus: BodyStatusDescriptor
     )
 }
 
@@ -16,7 +19,10 @@ struct NoopWatchSyncPublisher: WatchSyncPublishing {
         workoutRecommendation: WorkoutRecommendation,
         metrics: WatchKeyMetricsSnapshot,
         stressScore: Int,
-        stressLevelTitle: String
+        stressLevelTitle: String,
+        sampleScenarioTitle: String?,
+        sampleScenarioSummary: String?,
+        bodyStatus: BodyStatusDescriptor
     ) {}
 }
 
@@ -44,14 +50,20 @@ final class WatchSyncPublisheriOS: NSObject, WatchSyncPublishing, WCSessionDeleg
         workoutRecommendation: WorkoutRecommendation,
         metrics: WatchKeyMetricsSnapshot,
         stressScore: Int,
-        stressLevelTitle: String
+        stressLevelTitle: String,
+        sampleScenarioTitle: String?,
+        sampleScenarioSummary: String?,
+        bodyStatus: BodyStatusDescriptor
     ) {
         let payload = WatchSyncPayload(
             snapshot: snapshot,
             workoutRecommendation: workoutRecommendation,
             metrics: metrics,
             stressScore: stressScore,
-            stressLevelTitle: stressLevelTitle
+            stressLevelTitle: stressLevelTitle,
+            sampleScenarioTitle: sampleScenarioTitle,
+            sampleScenarioSummary: sampleScenarioSummary,
+            bodyStatus: bodyStatus
         )
         latestPayload = payload
         pushLatestPayloadIfPossible()

@@ -23,16 +23,16 @@ struct ContentView: View {
         store.stressReading
     }
 
+    private var sampleScenario: SampleScenario? {
+        store.sampleScenario
+    }
+
     private var energyProgress: CGFloat {
         CGFloat(energyScore) / 100
     }
 
-    private var status: EnergyStatus {
-        switch energyScore {
-        case 70...100: return .high
-        case 40..<70: return .medium
-        default: return .low
-        }
+    private var bodyStatus: BodyStatusDescriptor {
+        store.bodyStatusDescriptor
     }
 
     private var trendPoints: [Int] {
@@ -49,7 +49,7 @@ struct ContentView: View {
                 pageBackground
 
                 ScrollView {
-                    VStack(spacing: 18) {
+                    VStack(spacing: 16) {
                         heroCard
                         systemStateCard
                         scoreBreakdownCard
@@ -59,8 +59,8 @@ struct ContentView: View {
                         focusCard
                         recommendationCard
                     }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
+                    .padding(.horizontal, 12)
+                    .padding(.top, 10)
                     .padding(.bottom, 28)
                 }
             }
@@ -108,39 +108,45 @@ struct ContentView: View {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("今日状态")
-                        .font(.title3.weight(.semibold))
+                        .font(.title2.weight(.bold))
                     Text(daySummaryText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
 
-                Spacer()
+                Spacer(minLength: 12)
 
                 VStack(alignment: .trailing, spacing: 8) {
-                    badge(title: syncState.title, systemImage: syncState.icon, tint: syncState.color)
-                    badge(title: status.title, systemImage: "bolt.heart.fill", tint: status.color)
+                    if let sampleScenario {
+                        badge(title: sampleScenario.title, systemImage: "sparkles", tint: .purple)
+                    } else {
+                        badge(title: syncState.title, systemImage: syncState.icon, tint: syncState.color)
+                    }
+                    badge(title: bodyStatus.state.title, systemImage: "bolt.heart.fill", tint: bodyStatusColor)
                 }
             }
 
             ViewThatFits(in: .horizontal) {
-                HStack(spacing: 18) {
-                    scoreRing(size: 156)
+                HStack(alignment: .center, spacing: 18) {
+                    scoreRing(size: 178)
                     heroDetails
                 }
 
                 VStack(alignment: .leading, spacing: 18) {
-                    scoreRing(size: 172)
+                    scoreRing(size: 196)
                     heroDetails
                 }
             }
         }
-        .padding(20)
+        .padding(.horizontal, 22)
+        .padding(.vertical, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
                 .fill(
                     LinearGradient(
                         colors: [
-                            status.color.opacity(0.18),
+                            bodyStatusColor.opacity(0.18),
                             Color(.systemBackground),
                             Color(.secondarySystemBackground)
                         ],
@@ -149,7 +155,7 @@ struct ContentView: View {
                     )
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
                         .stroke(Color.white.opacity(0.35), lineWidth: 1)
                 )
                 .shadow(color: .black.opacity(0.06), radius: 14, y: 8)
@@ -158,8 +164,25 @@ struct ContentView: View {
 
     private var heroDetails: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(heroSummary)
-                .font(.headline.weight(.semibold))
+            VStack(alignment: .leading, spacing: 8) {
+                Text(bodyStatus.title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundColor(bodyStatusColor)
+
+                Text(bodyStatus.detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+
+                Text(bodyStatus.action)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(bodyStatusColor.opacity(0.10))
+            )
 
             Text("恢复分数 \(recoveryScore) 分，\(recoverySummary)")
                 .font(.subheadline)
@@ -177,9 +200,9 @@ struct ContentView: View {
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.footnote.weight(.semibold))
-                .foregroundColor(status.color)
+                .foregroundColor(bodyStatusColor)
                 .frame(width: 28, height: 28)
-                .background(status.color.opacity(0.12), in: Circle())
+                .background(bodyStatusColor.opacity(0.12), in: Circle())
 
             Text(title)
                 .font(.subheadline)
@@ -238,20 +261,26 @@ struct ContentView: View {
     @ViewBuilder
     private var systemStateCard: some View {
         if let message = store.healthErrorMessage {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundColor(.orange)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("当前显示示例数据")
-                        .font(.subheadline.weight(.semibold))
-                    Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("当前显示示例数据")
+                            .font(.subheadline.weight(.semibold))
+                        Text(message)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if sampleScenario != nil {
+                    sampleScenarioPicker
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
+            .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(Color.orange.opacity(0.12))
@@ -264,7 +293,7 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
+            .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(Color(.tertiarySystemFill))
@@ -272,14 +301,42 @@ struct ContentView: View {
         }
     }
 
+    private var sampleScenarioPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("示例场景")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                ForEach(SampleScenario.allCases) { scenario in
+                    Button {
+                        store.applySampleScenario(scenario)
+                    } label: {
+                        Text(scenario.title)
+                            .font(.caption.weight(.semibold))
+                            .foregroundColor(sampleScenario == scenario ? .white : .primary)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                Capsule(style: .continuous)
+                                    .fill(sampleScenario == scenario ? Color.accentColor : Color.white.opacity(0.7))
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
     private var scoreBreakdownCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeader(title: "分数拆解", subtitle: "把电量分成恢复基础与当日负荷两个层面来看")
+            sectionHeader(title: "分数拆解", subtitle: "把身体电量分成恢复基础与当日负荷两个层面来看。")
 
             scoreBar(
                 title: "身体电量",
                 value: energyScore,
-                tint: status.color,
+                tint: bodyStatusColor,
                 detail: energyDetail
             )
 
@@ -302,7 +359,7 @@ struct ContentView: View {
 
     private var stressCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeader(title: "压力状态", subtitle: "以 HRV 为主，结合静息心率和当前心率估计当前压力")
+            sectionHeader(title: "压力状态", subtitle: "以 HRV 为主，结合静息心率和当前心率估计当前压力。")
 
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
@@ -361,9 +418,9 @@ struct ContentView: View {
 
     private var trendCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionHeader(title: "近 7 天趋势", subtitle: "基于当前状态推演的恢复走势参考")
+            sectionHeader(title: "近 7 天趋势", subtitle: "基于当前状态推演的恢复走势参考。")
 
-            TrendSparkline(values: trendPoints, tint: status.color)
+            TrendSparkline(values: trendPoints, tint: bodyStatusColor)
                 .frame(height: 110)
 
             HStack {
@@ -381,7 +438,7 @@ struct ContentView: View {
 
     private var metricsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeader(title: "关键指标", subtitle: "用最常看的 6 个指标快速判断今天的身体负荷")
+            sectionHeader(title: "关键指标", subtitle: "用最常看的 6 个指标快速判断今天的身体负荷。")
 
             LazyVGrid(
                 columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)],
@@ -401,7 +458,7 @@ struct ContentView: View {
 
     private var focusCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeader(title: "今日关注", subtitle: "把训练、恢复和节奏压缩成两个最重要的判断")
+            sectionHeader(title: "今日关注", subtitle: "把训练、恢复和节奏压缩成两个最重要的判断。")
 
             focusRow(
                 title: "恢复节奏",
@@ -414,7 +471,7 @@ struct ContentView: View {
                 title: "活动安排",
                 detail: activityFocus,
                 icon: "figure.walk.motion",
-                tint: status.color
+                tint: bodyStatusColor
             )
         }
         .padding(18)
@@ -426,7 +483,7 @@ struct ContentView: View {
             RecommendationDetailView(recommendation: store.workoutRecommendation)
         } label: {
             VStack(alignment: .leading, spacing: 14) {
-                sectionHeader(title: "训练建议", subtitle: "结合当前电量与恢复情况生成，可点击查看详情教学")
+                sectionHeader(title: "训练建议", subtitle: "结合当前电量与恢复情况生成，可点击查看详细动作安排。")
 
                 Text(store.workoutRecommendation.title)
                     .font(.headline)
@@ -446,7 +503,7 @@ struct ContentView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "figure.run")
                         .foregroundColor(.secondary)
-                    Text("点按查看完整动作安排、节奏说明和注意事项。")
+                    Text("点击查看完整动作安排、节奏说明和注意事项。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -547,14 +604,14 @@ struct ContentView: View {
         Self.dayFormatter.string(from: store.snapshot.updatedAt)
     }
 
-    private var heroSummary: String {
-        switch status {
+    private var bodyStatusColor: Color {
+        switch bodyStatus.state {
         case .high:
-            return "身体状态很在线，今天适合安排更完整的训练。"
+            return .green
         case .medium:
-            return "整体状态平稳，适合把训练强度控制在可持续区间。"
+            return .orange
         case .low:
-            return "身体更需要恢复，建议以轻活动和休息为主。"
+            return .red
         }
     }
 
@@ -569,7 +626,7 @@ struct ContentView: View {
     }
 
     private var energyDetail: String {
-        switch status {
+        switch bodyStatus.state {
         case .high:
             return "电量充足，今天可以承接更明确的训练目标。"
         case .medium:
@@ -660,7 +717,7 @@ struct ContentView: View {
     }
 
     private var activityFocus: String {
-        switch status {
+        switch bodyStatus.state {
         case .high:
             return "可安排更完整的有氧或力量训练，但仍建议保留收操和放松时间。"
         case .medium:
@@ -767,28 +824,6 @@ private struct TrendSparkline: View {
     }
 }
 
-private enum EnergyStatus {
-    case high
-    case medium
-    case low
-
-    var title: String {
-        switch self {
-        case .high: return "状态良好"
-        case .medium: return "状态中等"
-        case .low: return "状态偏低"
-        }
-    }
-
-    var color: Color {
-        switch self {
-        case .high: return .green
-        case .medium: return .orange
-        case .low: return .red
-        }
-    }
-}
-
 private enum SyncState {
     case synced
     case loading
@@ -796,25 +831,34 @@ private enum SyncState {
 
     var title: String {
         switch self {
-        case .synced: return "已同步"
-        case .loading: return "同步中"
-        case .sample: return "示例数据"
+        case .synced:
+            return "已同步"
+        case .loading:
+            return "同步中"
+        case .sample:
+            return "示例数据"
         }
     }
 
     var icon: String {
         switch self {
-        case .synced: return "checkmark.circle.fill"
-        case .loading: return "arrow.triangle.2.circlepath"
-        case .sample: return "sparkles"
+        case .synced:
+            return "checkmark.circle.fill"
+        case .loading:
+            return "arrow.triangle.2.circlepath"
+        case .sample:
+            return "sparkles"
         }
     }
 
     var color: Color {
         switch self {
-        case .synced: return .green
-        case .loading: return .orange
-        case .sample: return .purple
+        case .synced:
+            return .green
+        case .loading:
+            return .orange
+        case .sample:
+            return .purple
         }
     }
 }

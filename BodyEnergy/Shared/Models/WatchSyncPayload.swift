@@ -10,6 +10,9 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
     var metrics: WatchKeyMetricsSnapshot?
     var stressScore: Int?
     var stressLevelTitle: String?
+    var sampleScenarioTitle: String?
+    var sampleScenarioSummary: String?
+    var bodyStatus: BodyStatusDescriptor?
     var updatedAt: Date
 
     init(
@@ -17,7 +20,10 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
         workoutRecommendation: WorkoutRecommendation? = nil,
         metrics: WatchKeyMetricsSnapshot? = nil,
         stressScore: Int? = nil,
-        stressLevelTitle: String? = nil
+        stressLevelTitle: String? = nil,
+        sampleScenarioTitle: String? = nil,
+        sampleScenarioSummary: String? = nil,
+        bodyStatus: BodyStatusDescriptor? = nil
     ) {
         self.energyScore = snapshot.energyScore
         self.recoveryScore = snapshot.recoveryScore
@@ -28,6 +34,9 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
         self.metrics = metrics
         self.stressScore = stressScore
         self.stressLevelTitle = stressLevelTitle
+        self.sampleScenarioTitle = sampleScenarioTitle
+        self.sampleScenarioSummary = sampleScenarioSummary
+        self.bodyStatus = bodyStatus
         self.updatedAt = snapshot.updatedAt
     }
 
@@ -84,6 +93,12 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
         context["activeEnergyKcal"] = metrics?.activeEnergyKcal
         context["stressScore"] = stressScore
         context["stressLevelTitle"] = stressLevelTitle
+        context["sampleScenarioTitle"] = sampleScenarioTitle
+        context["sampleScenarioSummary"] = sampleScenarioSummary
+        context["bodyStatusState"] = bodyStatus?.state.rawValue
+        context["bodyStatusTitle"] = bodyStatus?.title
+        context["bodyStatusDetail"] = bodyStatus?.detail
+        context["bodyStatusAction"] = bodyStatus?.action
         return context
     }
 
@@ -105,6 +120,25 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
         self.recommendationIntensityText = applicationContext["recommendationIntensityText"] as? String
         self.stressScore = applicationContext["stressScore"] as? Int
         self.stressLevelTitle = applicationContext["stressLevelTitle"] as? String
+        self.sampleScenarioTitle = applicationContext["sampleScenarioTitle"] as? String
+        self.sampleScenarioSummary = applicationContext["sampleScenarioSummary"] as? String
+
+        if
+            let stateRawValue = applicationContext["bodyStatusState"] as? String,
+            let state = BodyBatteryState(rawValue: stateRawValue),
+            let title = applicationContext["bodyStatusTitle"] as? String,
+            let detail = applicationContext["bodyStatusDetail"] as? String,
+            let action = applicationContext["bodyStatusAction"] as? String
+        {
+            self.bodyStatus = BodyStatusDescriptor(
+                state: state,
+                title: title,
+                detail: detail,
+                action: action
+            )
+        } else {
+            self.bodyStatus = nil
+        }
 
         if
             let heartRateBPM = applicationContext["heartRateBPM"] as? Double,

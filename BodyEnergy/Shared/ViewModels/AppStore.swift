@@ -11,6 +11,7 @@ final class AppStore: ObservableObject {
     @Published var workoutRecommendation: WorkoutRecommendation
     @Published var isLoadingHealth = false
     @Published var healthErrorMessage: String?
+    @Published var sampleScenario: SampleScenario?
 
     private let healthManager: HealthManaging
     private let scorer: EnergyScorer
@@ -21,6 +22,7 @@ final class AppStore: ObservableObject {
     init(
         health: HealthSnapshot,
         snapshot: EnergySnapshot,
+        sampleScenario: SampleScenario? = nil,
         healthManager: HealthManaging = HealthManager(),
         scorer: EnergyScorer = EnergyScorer(),
         stressAnalyzer: StressAnalyzer = StressAnalyzer(),
@@ -37,9 +39,14 @@ final class AppStore: ObservableObject {
         self.stressAnalyzer = stressAnalyzer
         self.recommendationEngine = recommendationEngine
         self.watchSyncPublisher = watchSyncPublisher
+        self.sampleScenario = sampleScenario
         self.workoutRecommendation = recommendationEngine.plan(
             for: scorer.computeScores(input: EnergyInput(snapshot: health))
         )
+    }
+
+    var bodyStatusDescriptor: BodyStatusDescriptor {
+        BodyStatusDescriptor.make(energyScore: snapshot.energyScore)
     }
 
     @MainActor
@@ -51,14 +58,26 @@ final class AppStore: ObservableObject {
         do {
             try await healthManager.requestAuthorization()
             let latest = try await healthManager.fetchLatestSnapshot(now: .now)
+            sampleScenario = nil
             health = latest
             recalculateScores(from: latest)
         } catch {
-            healthErrorMessage = presentableHealthMessage(for: error)
-            recalculateScores(from: health)
+            let scenario = sampleScenario ?? .balanced
+            sampleScenario = scenario
+            health = scenario.snapshot
+            healthErrorMessage = "\(presentableHealthMessage(for: error)) 当前展示“\(scenario.title)”场景。"
+            recalculateScores(from: scenario.snapshot)
         }
 
         isLoadingHealth = false
+    }
+
+    @MainActor
+    func applySampleScenario(_ scenario: SampleScenario) {
+        sampleScenario = scenario
+        health = scenario.snapshot
+        healthErrorMessage = "当前正在展示“\(scenario.title)”示例数据。\(scenario.summary)"
+        recalculateScores(from: scenario.snapshot)
     }
 
     @MainActor
@@ -100,13 +119,17 @@ final class AppStore: ObservableObject {
                 stressLevelTitle: stress.level.title
             ),
             stressScore: stress.score,
-            stressLevelTitle: stress.level.title
+            stressLevelTitle: stress.level.title,
+            sampleScenarioTitle: sampleScenario?.title,
+            sampleScenarioSummary: sampleScenario?.summary,
+            bodyStatus: BodyStatusDescriptor.make(energyScore: scores.energyScore)
         )
     }
 
     static let preview = AppStore(
-        health: .baseline,
-        snapshot: .preview
+        health: SampleScenario.balanced.snapshot,
+        snapshot: .preview,
+        sampleScenario: .balanced
     )
 }
 

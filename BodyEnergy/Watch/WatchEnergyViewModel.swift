@@ -10,6 +10,9 @@ final class WatchEnergyViewModel: ObservableObject {
     @Published private(set) var status: WatchEnergyStatus = .medium
     @Published private(set) var syncBadge: WatchSyncBadge = .waiting
     @Published private(set) var connectionNote: String = "等待 iPhone 同步"
+    @Published private(set) var sampleScenarioTitle: String?
+    @Published private(set) var sampleScenarioSummary: String?
+    @Published private(set) var bodyStatus: BodyStatusDescriptor = .make(energyScore: EnergySnapshot.preview.energyScore)
 
     private let manager: WatchConnectivityManager
     private var cancellables: Set<AnyCancellable> = []
@@ -40,6 +43,15 @@ final class WatchEnergyViewModel: ObservableObject {
 
         manager.$connectionNote
             .assign(to: &$connectionNote)
+
+        manager.$sampleScenarioTitle
+            .assign(to: &$sampleScenarioTitle)
+
+        manager.$sampleScenarioSummary
+            .assign(to: &$sampleScenarioSummary)
+
+        manager.$bodyStatus
+            .assign(to: &$bodyStatus)
     }
 
     func onAppear() {
@@ -78,20 +90,20 @@ final class WatchEnergyViewModel: ObservableObject {
     var syncStatusTitle: String {
         switch syncBadge {
         case .waiting:
-            return "等待手机数据"
+            return "等待 iPhone 数据"
         case .active:
-            return "已同步"
+            return "已同步到当前状态"
         case .error:
-            return "同步异常"
+            return "同步出现问题"
         }
     }
 
     var syncStatusDetail: String {
         switch syncBadge {
         case .waiting:
-            return connectionNote
+            return "打开 iPhone App 或下拉刷新后，会把最新数据推到手表。"
         case .active:
-            return "上次更新 \(updatedTimeText)"
+            return connectionNote
         case .error:
             return connectionNote
         }
