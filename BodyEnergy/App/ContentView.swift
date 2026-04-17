@@ -4,7 +4,6 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var store: AppStore
     @State private var isShowingRecommendationDetail = false
-    private let screenBounds = UIScreen.main.bounds
 
     private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -46,48 +45,36 @@ struct ContentView: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .top) {
-                pageBackground
+        ZStack {
+            pageBackground
 
-                ScrollView {
-                    VStack(spacing: 16) {
-                        Color.clear
-                            .frame(height: proxy.safeAreaInsets.top + 92)
-                        heroCard
-                        systemStateCard
-                        scoreBreakdownCard
-                        stressCard
-                        trendCard
-                        metricsSection
-                        focusCard
-                        recommendationCard
-                    }
-                    .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 8)
-                    .padding(.bottom, 28)
+            ScrollView {
+                VStack(spacing: 16) {
+                    heroCard
+                    systemStateCard
+                    scoreBreakdownCard
+                    stressCard
+                    trendCard
+                    metricsSection
+                    focusCard
+                    recommendationCard
                 }
-                .scrollIndicators(.hidden)
-                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-
-                topHeader(topInset: proxy.safeAreaInsets.top)
+                .frame(maxWidth: .infinity, alignment: .top)
+                .padding(.horizontal, 8)
+                .padding(.top, 8)
+                .padding(.bottom, 28)
             }
-            .frame(
-                width: max(proxy.size.width, screenBounds.width),
-                height: max(proxy.size.height, screenBounds.height),
-                alignment: .top
-            )
-            .ignoresSafeArea(edges: [.top, .bottom])
-            .refreshable {
-                await store.refreshHealthData()
-            }
+            .scrollIndicators(.hidden)
         }
-        .frame(
-            width: screenBounds.width,
-            height: screenBounds.height
-        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(pageBackground)
+        .ignoresSafeArea()
+        .safeAreaInset(edge: .top, spacing: 0) {
+            topHeader
+        }
+        .refreshable {
+            await store.refreshHealthData()
+        }
         .fullScreenCover(isPresented: $isShowingRecommendationDetail) {
             NavigationStack {
                 RecommendationDetailView(recommendation: store.workoutRecommendation)
@@ -120,7 +107,7 @@ struct ContentView: View {
         .ignoresSafeArea()
     }
 
-    private func topHeader(topInset: CGFloat) -> some View {
+    private var topHeader: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -141,8 +128,8 @@ struct ContentView: View {
                 Text("身体电量")
                     .font(.system(size: 28, weight: .bold))
             }
-            .padding(.top, topInset + 8)
             .padding(.horizontal, 16)
+            .padding(.top, 8)
             .padding(.bottom, 14)
 
             Divider()
