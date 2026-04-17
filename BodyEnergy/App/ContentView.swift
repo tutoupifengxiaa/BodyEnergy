@@ -59,13 +59,18 @@ struct ContentView: View {
                         focusCard
                         recommendationCard
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.top, 10)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
                     .padding(.bottom, 28)
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .navigationTitle("身体电量")
             .navigationBarTitleDisplayMode(.large)
+            .toolbarBackground(Color(.systemGroupedBackground), for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: refreshData) {
@@ -83,6 +88,7 @@ struct ContentView: View {
                 await store.refreshHealthData()
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func refreshData() {
@@ -138,8 +144,8 @@ struct ContentView: View {
                 }
             }
         }
-        .padding(.horizontal, 22)
-        .padding(.vertical, 24)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 22)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
