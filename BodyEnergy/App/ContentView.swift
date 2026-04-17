@@ -46,11 +46,13 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             GeometryReader { proxy in
-                ZStack {
+                ZStack(alignment: .top) {
                     pageBackground
 
                     ScrollView {
                         VStack(spacing: 16) {
+                            Color.clear
+                                .frame(height: proxy.safeAreaInsets.top + 92)
                             heroCard
                             systemStateCard
                             scoreBreakdownCard
@@ -67,26 +69,13 @@ struct ContentView: View {
                     }
                     .scrollIndicators(.hidden)
                     .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+
+                    topHeader(topInset: proxy.safeAreaInsets.top)
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+                .ignoresSafeArea(edges: [.top, .bottom])
             }
-            .navigationTitle("身体电量")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbarBackground(Color(.systemGroupedBackground), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: refreshData) {
-                        if store.isLoadingHealth {
-                            ProgressView()
-                                .progressViewStyle(.circular)
-                        } else {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                    }
-                    .accessibilityLabel("刷新健康数据")
-                }
-            }
+            .toolbar(.hidden, for: .navigationBar)
             .refreshable {
                 await store.refreshHealthData()
             }
@@ -111,6 +100,37 @@ struct ContentView: View {
             endPoint: .bottom
         )
         .ignoresSafeArea()
+    }
+
+    private func topHeader(topInset: CGFloat) -> some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Spacer()
+
+                    Button(action: refreshData) {
+                        if store.isLoadingHealth {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.title3.weight(.semibold))
+                        }
+                    }
+                    .accessibilityLabel("刷新健康数据")
+                }
+
+                Text("身体电量")
+                    .font(.system(size: 28, weight: .bold))
+            }
+            .padding(.top, topInset + 8)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 14)
+
+            Divider()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemGroupedBackground))
     }
 
     private var heroCard: some View {
