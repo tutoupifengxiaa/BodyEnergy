@@ -3,17 +3,18 @@
 @main
 struct BodyEnergyApp: App {
     @StateObject private var store = AppStore.preview
+    private let screenBounds = UIScreen.main.bounds
 
     var body: some Scene {
         WindowGroup {
             ZStack {
-                Color(.systemGroupedBackground)
+                Color.white
                     .ignoresSafeArea()
 
                 ContentView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .frame(width: screenBounds.width, height: screenBounds.height)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(width: screenBounds.width, height: screenBounds.height)
             .environmentObject(store)
             .task {
                 await store.refreshHealthData()

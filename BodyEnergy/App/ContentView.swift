@@ -4,6 +4,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var store: AppStore
     @State private var isShowingRecommendationDetail = false
+    private let screenBounds = UIScreen.main.bounds
 
     private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -72,13 +73,20 @@ struct ContentView: View {
 
                 topHeader(topInset: proxy.safeAreaInsets.top)
             }
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            .frame(
+                width: max(proxy.size.width, screenBounds.width),
+                height: max(proxy.size.height, screenBounds.height),
+                alignment: .top
+            )
             .ignoresSafeArea(edges: [.top, .bottom])
             .refreshable {
                 await store.refreshHealthData()
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(
+            width: screenBounds.width,
+            height: screenBounds.height
+        )
         .background(pageBackground)
         .fullScreenCover(isPresented: $isShowingRecommendationDetail) {
             NavigationStack {
