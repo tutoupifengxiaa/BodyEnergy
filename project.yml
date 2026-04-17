@@ -41,9 +41,6 @@ targets:
   BodyEnergyWatch:
     type: application
     platform: watchOS
-    dependencies:
-      - target: BodyEnergyWidget
-        embed: true
     sources:
       - path: BodyEnergy/Watch
       - path: BodyEnergy/Shared/Models
