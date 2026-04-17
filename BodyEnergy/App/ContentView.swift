@@ -3,6 +3,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var isShowingRecommendationDetail = false
 
     private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -44,44 +45,53 @@ struct ContentView: View {
     }
 
     var body: some View {
-        NavigationStack {
-            GeometryReader { proxy in
-                ZStack(alignment: .top) {
-                    pageBackground
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                pageBackground
 
-                    ScrollView {
-                        VStack(spacing: 16) {
-                            Color.clear
-                                .frame(height: proxy.safeAreaInsets.top + 92)
-                            heroCard
-                            systemStateCard
-                            scoreBreakdownCard
-                            stressCard
-                            trendCard
-                            metricsSection
-                            focusCard
-                            recommendationCard
-                        }
-                        .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
-                        .padding(.horizontal, 8)
-                        .padding(.top, 8)
-                        .padding(.bottom, 28)
+                ScrollView {
+                    VStack(spacing: 16) {
+                        Color.clear
+                            .frame(height: proxy.safeAreaInsets.top + 92)
+                        heroCard
+                        systemStateCard
+                        scoreBreakdownCard
+                        stressCard
+                        trendCard
+                        metricsSection
+                        focusCard
+                        recommendationCard
                     }
-                    .scrollIndicators(.hidden)
-                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-
-                    topHeader(topInset: proxy.safeAreaInsets.top)
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+                    .padding(.bottom, 28)
                 }
+                .scrollIndicators(.hidden)
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
-                .ignoresSafeArea(edges: [.top, .bottom])
+
+                topHeader(topInset: proxy.safeAreaInsets.top)
             }
-            .toolbar(.hidden, for: .navigationBar)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            .ignoresSafeArea(edges: [.top, .bottom])
             .refreshable {
                 await store.refreshHealthData()
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(pageBackground)
+        .fullScreenCover(isPresented: $isShowingRecommendationDetail) {
+            NavigationStack {
+                RecommendationDetailView(recommendation: store.workoutRecommendation)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button("关闭") {
+                                isShowingRecommendationDetail = false
+                            }
+                        }
+                    }
+            }
+        }
     }
 
     private func refreshData() {
@@ -509,8 +519,8 @@ struct ContentView: View {
     }
 
     private var recommendationCard: some View {
-        NavigationLink {
-            RecommendationDetailView(recommendation: store.workoutRecommendation)
+        Button {
+            isShowingRecommendationDetail = true
         } label: {
             VStack(alignment: .leading, spacing: 14) {
                 sectionHeader(title: "训练建议", subtitle: "结合当前电量与恢复情况生成，可点击查看详细动作安排。")
