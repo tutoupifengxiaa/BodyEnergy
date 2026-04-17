@@ -68,7 +68,9 @@ struct BodyEnergyComplicationEntryView: View {
                 Label("身体电量", systemImage: "bolt.heart")
                     .font(.caption2.weight(.semibold))
                     .lineLimit(1)
+
                 Spacer(minLength: 4)
+
                 Text("\(entry.snapshot.energyScore)")
                     .font(.title3.weight(.bold))
                     .foregroundStyle(energyTint)
@@ -91,6 +93,7 @@ struct BodyEnergyComplicationEntryView: View {
             Text(title)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+
             Text(value)
                 .font(.caption.weight(.semibold))
         }

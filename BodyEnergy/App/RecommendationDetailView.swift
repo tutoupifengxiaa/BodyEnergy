@@ -24,6 +24,7 @@ struct RecommendationDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(recommendation.title)
                 .font(.title3.weight(.semibold))
+
             Text(recommendation.summary)
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -44,6 +45,7 @@ struct RecommendationDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("训练目的")
                 .font(.headline)
+
             Text(recommendation.purposeText)
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -88,6 +90,7 @@ struct RecommendationDetailView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("注意事项")
                 .font(.headline)
+
             Text(recommendation.cautionText)
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -105,6 +108,7 @@ struct RecommendationDetailView: View {
             Text(title)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+
             Text(value)
                 .font(.caption.weight(.semibold))
                 .foregroundColor(tint)
