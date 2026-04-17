@@ -32,15 +32,18 @@ final class WatchConnectivityManager: NSObject, ObservableObject {
         }
 
         syncBadge = .waiting
+        connectionNote = "正在连接 iPhone"
         session.activate()
+    }
+
+    func requestLatest() {
+        guard let session else { return }
 
         if let payload = WatchSyncPayload(applicationContext: session.receivedApplicationContext) {
             apply(payload, note: "已同步", syncBadge: .active)
         }
-    }
 
-    func requestLatest() {
-        guard let session, session.isReachable else { return }
+        guard session.activationState == .activated, session.isReachable else { return }
         session.sendMessage(["request": "latestEnergy"], replyHandler: nil) { _ in }
     }
 }
@@ -55,9 +58,20 @@ extension WatchConnectivityManager: WCSessionDelegate {
             if let error {
                 syncBadge = .error
                 connectionNote = "同步错误：\(error.localizedDescription)"
+                return
+            }
+
+            if activationState == .activated {
+                syncBadge = .active
+                if let payload = WatchSyncPayload(applicationContext: session.receivedApplicationContext) {
+                    apply(payload, note: "已同步", syncBadge: .active)
+                } else {
+                    connectionNote = "已连接，等待数据"
+                }
+                requestLatest()
             } else {
-                syncBadge = activationState == .activated ? .active : .waiting
-                connectionNote = activationState == .activated ? "已连接" : "连接中"
+                syncBadge = .waiting
+                connectionNote = "连接中"
             }
         }
     }

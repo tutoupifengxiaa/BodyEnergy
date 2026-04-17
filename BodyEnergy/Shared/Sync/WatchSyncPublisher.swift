@@ -25,6 +25,7 @@ import WatchConnectivity
 
 final class WatchSyncPublisheriOS: NSObject, WatchSyncPublishing, WCSessionDelegate {
     private let session: WCSession?
+    private var latestPayload: WatchSyncPayload?
 
     override init() {
         if WCSession.isSupported() {
@@ -45,9 +46,6 @@ final class WatchSyncPublisheriOS: NSObject, WatchSyncPublishing, WCSessionDeleg
         stressScore: Int,
         stressLevelTitle: String
     ) {
-        guard let session else { return }
-        guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
-
         let payload = WatchSyncPayload(
             snapshot: snapshot,
             workoutRecommendation: workoutRecommendation,
@@ -55,12 +53,8 @@ final class WatchSyncPublisheriOS: NSObject, WatchSyncPublishing, WCSessionDeleg
             stressScore: stressScore,
             stressLevelTitle: stressLevelTitle
         )
-
-        do {
-            try session.updateApplicationContext(payload.applicationContext)
-        } catch {
-            return
-        }
+        latestPayload = payload
+        pushLatestPayloadIfPossible()
     }
 
     func sessionDidBecomeInactive(_ session: WCSession) {}
@@ -73,7 +67,31 @@ final class WatchSyncPublisheriOS: NSObject, WatchSyncPublishing, WCSessionDeleg
         _ session: WCSession,
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
-    ) {}
+    ) {
+        guard error == nil, activationState == .activated else { return }
+        pushLatestPayloadIfPossible()
+    }
+
+    func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        guard let request = message["request"] as? String, request == "latestEnergy" else { return }
+        pushLatestPayloadIfPossible()
+    }
+}
+
+private extension WatchSyncPublisheriOS {
+    func pushLatestPayloadIfPossible() {
+        guard let session, let latestPayload else { return }
+        guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
+
+        do {
+            try session.updateApplicationContext(latestPayload.applicationContext)
+        } catch {
+            return
+        }
+
+        guard session.isReachable else { return }
+        session.sendMessage(latestPayload.applicationContext, replyHandler: nil) { _ in }
+    }
 }
 #endif
 
