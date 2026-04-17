@@ -7,6 +7,7 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
     var recommendationTitle: String?
     var recommendationDurationText: String?
     var recommendationIntensityText: String?
+    var metrics: WatchKeyMetricsSnapshot?
     var stressScore: Int?
     var stressLevelTitle: String?
     var updatedAt: Date
@@ -14,6 +15,7 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
     init(
         snapshot: EnergySnapshot,
         workoutRecommendation: WorkoutRecommendation? = nil,
+        metrics: WatchKeyMetricsSnapshot? = nil,
         stressScore: Int? = nil,
         stressLevelTitle: String? = nil
     ) {
@@ -23,6 +25,7 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
         self.recommendationTitle = workoutRecommendation?.title
         self.recommendationDurationText = workoutRecommendation?.durationText
         self.recommendationIntensityText = workoutRecommendation?.intensityText
+        self.metrics = metrics
         self.stressScore = stressScore
         self.stressLevelTitle = stressLevelTitle
         self.updatedAt = snapshot.updatedAt
@@ -70,9 +73,15 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
             "recommendation": recommendation,
             "updatedAt": updatedAt.timeIntervalSince1970
         ]
+
         context["recommendationTitle"] = recommendationTitle
         context["recommendationDurationText"] = recommendationDurationText
         context["recommendationIntensityText"] = recommendationIntensityText
+        context["heartRateBPM"] = metrics?.heartRateBPM
+        context["heartRateVariabilityMS"] = metrics?.heartRateVariabilityMS
+        context["restingHeartRateBPM"] = metrics?.restingHeartRateBPM
+        context["sleepHours"] = metrics?.sleepHours
+        context["activeEnergyKcal"] = metrics?.activeEnergyKcal
         context["stressScore"] = stressScore
         context["stressLevelTitle"] = stressLevelTitle
         return context
@@ -96,6 +105,28 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
         self.recommendationIntensityText = applicationContext["recommendationIntensityText"] as? String
         self.stressScore = applicationContext["stressScore"] as? Int
         self.stressLevelTitle = applicationContext["stressLevelTitle"] as? String
+
+        if
+            let heartRateBPM = applicationContext["heartRateBPM"] as? Double,
+            let heartRateVariabilityMS = applicationContext["heartRateVariabilityMS"] as? Double,
+            let restingHeartRateBPM = applicationContext["restingHeartRateBPM"] as? Double,
+            let sleepHours = applicationContext["sleepHours"] as? Double,
+            let activeEnergyKcal = applicationContext["activeEnergyKcal"] as? Double,
+            let stressScore = applicationContext["stressScore"] as? Int
+        {
+            self.metrics = WatchKeyMetricsSnapshot(
+                heartRateBPM: heartRateBPM,
+                heartRateVariabilityMS: heartRateVariabilityMS,
+                restingHeartRateBPM: restingHeartRateBPM,
+                sleepHours: sleepHours,
+                activeEnergyKcal: activeEnergyKcal,
+                stressScore: stressScore,
+                stressLevelTitle: applicationContext["stressLevelTitle"] as? String ?? WidgetMetricsSnapshot.preview.stressLevelTitle
+            )
+        } else {
+            self.metrics = nil
+        }
+
         self.updatedAt = Date(timeIntervalSince1970: timestamp)
     }
 }

@@ -8,6 +8,7 @@ import WidgetKit
 final class WatchConnectivityManager: NSObject, ObservableObject {
     @Published private(set) var snapshot: EnergySnapshot = .preview
     @Published private(set) var workoutRecommendation: WorkoutRecommendation = .preview
+    @Published private(set) var metrics: WatchKeyMetricsSnapshot = .preview
     @Published private(set) var syncBadge: WatchSyncBadge = .waiting
     @Published private(set) var connectionNote: String = "等待 iPhone 同步"
 
@@ -72,7 +73,7 @@ extension WatchConnectivityManager: WCSessionDelegate {
         }
     }
 
-    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
         guard let payload = WatchSyncPayload(applicationContext: message) else { return }
         Task { @MainActor in
             apply(payload, note: "实时更新", syncBadge: .active)
@@ -84,6 +85,9 @@ private extension WatchConnectivityManager {
     func apply(_ payload: WatchSyncPayload, note: String, syncBadge: WatchSyncBadge) {
         snapshot = payload.asSnapshot
         workoutRecommendation = payload.workoutRecommendation
+        if let metrics = payload.metrics {
+            self.metrics = metrics
+        }
         self.syncBadge = syncBadge
         connectionNote = note
 

@@ -22,6 +22,15 @@ final class WatchSyncPayloadTests: XCTestCase {
         let payload = WatchSyncPayload(
             snapshot: snapshot,
             workoutRecommendation: recommendation,
+            metrics: WatchKeyMetricsSnapshot(
+                heartRateBPM: 72,
+                heartRateVariabilityMS: 55,
+                restingHeartRateBPM: 58,
+                sleepHours: 7.5,
+                activeEnergyKcal: 520,
+                stressScore: 48,
+                stressLevelTitle: "压力适中"
+            ),
             stressScore: 48,
             stressLevelTitle: "压力适中"
         )
@@ -32,6 +41,11 @@ final class WatchSyncPayloadTests: XCTestCase {
         XCTAssertEqual(restored?.recommendationIntensityText, recommendation.intensityText)
         XCTAssertEqual(restored?.stressScore, 48)
         XCTAssertEqual(restored?.stressLevelTitle, "压力适中")
+        XCTAssertEqual(restored?.metrics?.heartRateBPM, 72)
+        XCTAssertEqual(restored?.metrics?.heartRateVariabilityMS, 55)
+        XCTAssertEqual(restored?.metrics?.restingHeartRateBPM, 58)
+        XCTAssertEqual(restored?.metrics?.sleepHours, 7.5)
+        XCTAssertEqual(restored?.metrics?.activeEnergyKcal, 520)
     }
 
     func testPayloadFallsBackToDisplayableRecommendationWhenStructuredFieldsMissing() {
@@ -46,6 +60,7 @@ final class WatchSyncPayloadTests: XCTestCase {
         XCTAssertFalse(payload?.workoutRecommendation.steps.isEmpty ?? true)
         XCTAssertNil(payload?.stressScore)
         XCTAssertNil(payload?.stressLevelTitle)
+        XCTAssertNil(payload?.metrics)
     }
 
     func testWidgetSnapshotFallsBackToPreviousStressTitle() {

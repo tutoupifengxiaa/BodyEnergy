@@ -4,6 +4,7 @@ protocol WatchSyncPublishing {
     func publish(
         snapshot: EnergySnapshot,
         workoutRecommendation: WorkoutRecommendation,
+        metrics: WatchKeyMetricsSnapshot,
         stressScore: Int,
         stressLevelTitle: String
     )
@@ -13,6 +14,7 @@ struct NoopWatchSyncPublisher: WatchSyncPublishing {
     func publish(
         snapshot: EnergySnapshot,
         workoutRecommendation: WorkoutRecommendation,
+        metrics: WatchKeyMetricsSnapshot,
         stressScore: Int,
         stressLevelTitle: String
     ) {}
@@ -39,14 +41,17 @@ final class WatchSyncPublisheriOS: NSObject, WatchSyncPublishing, WCSessionDeleg
     func publish(
         snapshot: EnergySnapshot,
         workoutRecommendation: WorkoutRecommendation,
+        metrics: WatchKeyMetricsSnapshot,
         stressScore: Int,
         stressLevelTitle: String
     ) {
         guard let session else { return }
         guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
+
         let payload = WatchSyncPayload(
             snapshot: snapshot,
             workoutRecommendation: workoutRecommendation,
+            metrics: metrics,
             stressScore: stressScore,
             stressLevelTitle: stressLevelTitle
         )
@@ -59,10 +64,16 @@ final class WatchSyncPublisheriOS: NSObject, WatchSyncPublishing, WCSessionDeleg
     }
 
     func sessionDidBecomeInactive(_ session: WCSession) {}
+
     func sessionDidDeactivate(_ session: WCSession) {
         session.activate()
     }
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {}
+
+    func session(
+        _ session: WCSession,
+        activationDidCompleteWith activationState: WCSessionActivationState,
+        error: Error?
+    ) {}
 }
 #endif
 

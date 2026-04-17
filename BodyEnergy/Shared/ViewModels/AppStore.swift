@@ -94,6 +94,11 @@ final class AppStore: ObservableObject {
         watchSyncPublisher.publish(
             snapshot: energySnapshot,
             workoutRecommendation: recommendation,
+            metrics: WatchKeyMetricsSnapshot(
+                health: source,
+                stressScore: stress.score,
+                stressLevelTitle: stress.level.title
+            ),
             stressScore: stress.score,
             stressLevelTitle: stress.level.title
         )
