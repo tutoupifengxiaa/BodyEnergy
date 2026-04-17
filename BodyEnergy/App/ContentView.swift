@@ -92,6 +92,7 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(pageBackground)
     }
 
     private func refreshData() {

@@ -6,11 +6,18 @@ struct BodyEnergyApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(store)
-                .task {
-                    await store.refreshHealthData()
-                }
+            ZStack {
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
+
+                ContentView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .environmentObject(store)
+            .task {
+                await store.refreshHealthData()
+            }
         }
     }
 }
