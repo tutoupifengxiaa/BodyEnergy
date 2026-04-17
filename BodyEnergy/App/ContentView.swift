@@ -45,28 +45,31 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                pageBackground
+            GeometryReader { proxy in
+                ZStack {
+                    pageBackground
 
-                ScrollView {
-                    VStack(spacing: 16) {
-                        heroCard
-                        systemStateCard
-                        scoreBreakdownCard
-                        stressCard
-                        trendCard
-                        metricsSection
-                        focusCard
-                        recommendationCard
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            heroCard
+                            systemStateCard
+                            scoreBreakdownCard
+                            stressCard
+                            trendCard
+                            metricsSection
+                            focusCard
+                            recommendationCard
+                        }
+                        .frame(maxWidth: .infinity, minHeight: proxy.size.height, alignment: .top)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 8)
+                        .padding(.bottom, 28)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 8)
-                    .padding(.bottom, 28)
+                    .scrollIndicators(.hidden)
+                    .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .navigationTitle("身体电量")
             .navigationBarTitleDisplayMode(.large)
             .toolbarBackground(Color(.systemGroupedBackground), for: .navigationBar)
