@@ -13,11 +13,11 @@ struct ContentView: View {
     }()
 
     private var energyScore: Int {
-        bounded(store.snapshot.energyScore, to: 0...100)
+        bounded(store.snapshot.energyScore, to: 0 ... 100)
     }
 
     private var recoveryScore: Int {
-        bounded(store.snapshot.recoveryScore, to: 0...100)
+        bounded(store.snapshot.recoveryScore, to: 0 ... 100)
     }
 
     private var stressReading: StressReading {
@@ -37,7 +37,7 @@ struct ContentView: View {
     }
 
     private var trendPoints: [Int] {
-        [-9, -6, -4, -2, 0, -1, 0].map { bounded(energyScore + $0, to: 0...100) }
+        [-9, -6, -4, -2, 0, -1, 0].map { bounded(energyScore + $0, to: 0 ... 100) }
     }
 
     private var weekdayLabels: [String] {
@@ -45,36 +45,39 @@ struct ContentView: View {
     }
 
     var body: some View {
-        ZStack {
-            pageBackground
+        GeometryReader { proxy in
+            let topInset = proxy.safeAreaInsets.top
+            let bottomInset = proxy.safeAreaInsets.bottom
 
-            ScrollView {
-                VStack(spacing: 16) {
-                    heroCard
-                    systemStateCard
-                    scoreBreakdownCard
-                    stressCard
-                    trendCard
-                    metricsSection
-                    focusCard
-                    recommendationCard
+            VStack(spacing: 0) {
+                topHeader(topInset: topInset)
+
+                ScrollView(.vertical) {
+                    VStack(spacing: 16) {
+                        heroCard
+                        systemStateCard
+                        scoreBreakdownCard
+                        stressCard
+                        trendCard
+                        metricsSection
+                        focusCard
+                        recommendationCard
+                    }
+                    .frame(maxWidth: .infinity, alignment: .top)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 8)
+                    .padding(.bottom, max(bottomInset, 28))
                 }
-                .frame(maxWidth: .infinity, alignment: .top)
-                .padding(.horizontal, 8)
-                .padding(.top, 8)
-                .padding(.bottom, 28)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .scrollIndicators(.hidden)
+                .refreshable {
+                    await store.refreshHealthData()
+                }
             }
-            .scrollIndicators(.hidden)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+            .background(pageBackground)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(pageBackground)
         .ignoresSafeArea()
-        .safeAreaInset(edge: .top, spacing: 0) {
-            topHeader
-        }
-        .refreshable {
-            await store.refreshHealthData()
-        }
         .fullScreenCover(isPresented: $isShowingRecommendationDetail) {
             NavigationStack {
                 RecommendationDetailView(recommendation: store.workoutRecommendation)
@@ -104,10 +107,9 @@ struct ContentView: View {
             startPoint: .top,
             endPoint: .bottom
         )
-        .ignoresSafeArea()
     }
 
-    private var topHeader: some View {
+    private func topHeader(topInset: CGFloat) -> some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
                 HStack {
@@ -129,7 +131,7 @@ struct ContentView: View {
                     .font(.system(size: 28, weight: .bold))
             }
             .padding(.horizontal, 16)
-            .padding(.top, 8)
+            .padding(.top, max(topInset, 8))
             .padding(.bottom, 14)
 
             Divider()
@@ -144,6 +146,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("今日状态")
                         .font(.title2.weight(.bold))
+
                     Text(daySummaryText)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -157,6 +160,7 @@ struct ContentView: View {
                     } else {
                         badge(title: syncState.title, systemImage: syncState.icon, tint: syncState.color)
                     }
+
                     badge(title: bodyStatus.state.title, systemImage: "bolt.heart.fill", tint: bodyStatusColor)
                 }
             }
@@ -259,7 +263,7 @@ struct ContentView: View {
                 .trim(from: 0, to: energyProgress)
                 .stroke(
                     AngularGradient(
-                        colors: [Color.green, Color.yellow, Color.orange, Color.red],
+                        colors: [.green, .yellow, .orange, .red],
                         center: .center
                     ),
                     style: StrokeStyle(lineWidth: 16, lineCap: .round)
@@ -270,9 +274,11 @@ struct ContentView: View {
             VStack(spacing: 6) {
                 Text("\(energyScore)")
                     .font(.system(size: size * 0.28, weight: .bold, design: .rounded))
+
                 Text("电量分数")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
+
                 Text("\(store.snapshot.updatedAt, style: .time) 更新")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -304,6 +310,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("当前显示示例数据")
                             .font(.subheadline.weight(.semibold))
+
                         Text(message)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -322,7 +329,9 @@ struct ContentView: View {
             )
         } else if store.isLoadingHealth {
             HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
+                ProgressView()
+                    .controlSize(.small)
+
                 Text("正在同步健康数据...")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -401,6 +410,7 @@ struct ContentView: View {
                     Text(stressTitle)
                         .font(.headline)
                         .foregroundColor(stressColor)
+
                     Text(stressDetail)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
@@ -412,6 +422,7 @@ struct ContentView: View {
                     Text("\(stressReading.score)")
                         .font(.system(size: 34, weight: .bold, design: .rounded))
                         .foregroundColor(stressColor)
+
                     Text("压力分")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -436,7 +447,9 @@ struct ContentView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
+
                 Spacer()
+
                 Text("\(value) 分")
                     .font(.subheadline.weight(.semibold))
                     .foregroundColor(tint)
@@ -538,10 +551,13 @@ struct ContentView: View {
                 HStack(spacing: 10) {
                     Image(systemName: "figure.run")
                         .foregroundColor(.secondary)
+
                     Text("点击查看完整动作安排、节奏说明和注意事项。")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
+
                     Spacer()
+
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.semibold))
                         .foregroundColor(.secondary)
@@ -563,6 +579,7 @@ struct ContentView: View {
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)
                     .font(.title2.weight(.bold))
+
                 Text(unit)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -586,6 +603,7 @@ struct ContentView: View {
             Text(title)
                 .font(.caption2.weight(.medium))
                 .foregroundStyle(.secondary)
+
             Text(value)
                 .font(.caption.weight(.semibold))
                 .foregroundColor(tint)
@@ -611,6 +629,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.subheadline.weight(.semibold))
+
                 Text(detail)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -624,6 +643,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title)
                 .font(.headline)
+
             Text(subtitle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -673,7 +693,7 @@ struct ContentView: View {
 
     private var recoveryDetail: String {
         if recoveryScore >= 75 {
-            return "睡眠、HRV 和静息心率整体表现较好，恢复面更稳。"
+            return "睡眠、HRV 和静息心率整体表现较好，恢复面更扎实。"
         }
         if recoveryScore >= 50 {
             return "恢复基础尚可，建议控制训练总量，避免连续透支。"
