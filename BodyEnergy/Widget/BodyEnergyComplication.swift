@@ -241,6 +241,7 @@ struct StressComplicationEntryView: View {
             Text(stressMoodTitle)
                 .font(.system(size: 8, weight: .medium))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
         }
         .widgetLabel {
             Text(stressMoodTitle)
@@ -267,9 +268,16 @@ struct StressComplicationEntryView: View {
             .gaugeStyle(.accessoryLinearCapacity)
             .tint(stressTint)
 
-            HStack(spacing: 8) {
-                metricLabel(title: "评语", value: stressMoodTitle, tint: stressTint)
-                metricLabel(title: "等级", value: entry.snapshot.stressLevelTitle, tint: stressTint)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(stressMoodTitle)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(stressTint)
+                    .lineLimit(1)
+
+                Text("等级：\(entry.snapshot.stressLevelTitle)")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
         }
     }
@@ -290,9 +298,8 @@ struct StressComplicationEntryView: View {
             }
             .tint(stressTint)
 
-            HStack {
+            VStack(alignment: .leading, spacing: 2) {
                 compactMetric(title: "评语", value: stressMoodTitle)
-                Spacer()
                 compactMetric(title: "等级", value: entry.snapshot.stressLevelTitle)
             }
         }
