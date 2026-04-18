@@ -101,10 +101,10 @@ struct BodyEnergyComplicationEntryView: View {
             .gaugeStyle(.accessoryLinearCapacity)
             .tint(energyTint)
 
-            HStack(spacing: 8) {
-                metricLabel(title: "恢复", value: "\(entry.snapshot.recoveryScore)", tint: .blue)
-                metricLabel(title: "状态", value: energyLevelTitle, tint: energyTint)
-            }
+            Text(energyLevelTitle)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(energyTint)
+                .lineLimit(1)
         }
     }
 
@@ -268,17 +268,10 @@ struct StressComplicationEntryView: View {
             .gaugeStyle(.accessoryLinearCapacity)
             .tint(stressTint)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(stressMoodTitle)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(stressTint)
-                    .lineLimit(1)
-
-                Text("等级：\(entry.snapshot.stressLevelTitle)")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+            Text(stressMoodTitle)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(stressTint)
+                .lineLimit(1)
         }
     }
 
