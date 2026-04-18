@@ -39,7 +39,7 @@ targets:
         - BodyEnergyTests
 
   BodyEnergyWatch:
-    type: application.watchapp2
+    type: application
     platform: watchOS
     dependencies:
       - target: BodyEnergyWidget
