@@ -394,16 +394,19 @@ private func compactMetric(title: String, value: String) -> some View {
 #endif
 
 private var energySupportedFamilies: [WidgetFamily] {
-    var families: [WidgetFamily] = [
+#if os(iOS)
+    return [
+        .systemSmall,
+        .systemMedium
+    ]
+#else
+    return [
         .accessoryInline,
         .accessoryCircular,
         .accessoryCorner,
         .accessoryRectangular
     ]
-#if os(iOS)
-    families.append(contentsOf: [.systemSmall, .systemMedium])
 #endif
-    return families
 }
 
 struct BodyEnergyComplication: Widget {
