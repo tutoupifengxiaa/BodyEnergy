@@ -56,18 +56,20 @@ struct BodyEnergyComplicationEntryView: View {
         } currentValueLabel: {
             Text("\(entry.snapshot.energyScore)")
         }
-        .gaugeStyle(.accessoryCircular)
+        .gaugeStyle(.accessoryCircularCapacity)
         .tint(energyTint)
     }
 
     private var energyCornerGauge: some View {
-        Gauge(value: Double(entry.snapshot.energyScore), in: 0...100) {
-            Image(systemName: "bolt.heart")
-        } currentValueLabel: {
+        VStack(alignment: .leading, spacing: 2) {
             Text("\(entry.snapshot.energyScore)")
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(energyTint)
+
+            Text(energyLevelTitle)
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(.secondary)
         }
-        .gaugeStyle(.accessoryCorner)
-        .tint(energyTint)
         .widgetLabel {
             Text(energyLevelTitle)
         }
@@ -90,7 +92,7 @@ struct BodyEnergyComplicationEntryView: View {
             Gauge(value: Double(entry.snapshot.energyScore), in: 0...100) {
                 EmptyView()
             }
-            .gaugeStyle(.accessoryLinear)
+            .gaugeStyle(.accessoryLinearCapacity)
             .tint(energyTint)
 
             HStack(spacing: 8) {
@@ -149,18 +151,20 @@ struct StressComplicationEntryView: View {
         } currentValueLabel: {
             Text("\(entry.snapshot.stressScore)")
         }
-        .gaugeStyle(.accessoryCircular)
+        .gaugeStyle(.accessoryCircularCapacity)
         .tint(stressTint)
     }
 
     private var stressCornerGauge: some View {
-        Gauge(value: Double(entry.snapshot.stressScore), in: 0...100) {
-            Image(systemName: "brain.head.profile")
-        } currentValueLabel: {
+        VStack(alignment: .leading, spacing: 2) {
             Text("\(entry.snapshot.stressScore)")
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(stressTint)
+
+            Text(stressMoodTitle)
+                .font(.system(size: 8, weight: .medium))
+                .foregroundStyle(.secondary)
         }
-        .gaugeStyle(.accessoryCorner)
-        .tint(stressTint)
         .widgetLabel {
             Text(stressMoodTitle)
         }
@@ -183,7 +187,7 @@ struct StressComplicationEntryView: View {
             Gauge(value: Double(entry.snapshot.stressScore), in: 0...100) {
                 EmptyView()
             }
-            .gaugeStyle(.accessoryLinear)
+            .gaugeStyle(.accessoryLinearCapacity)
             .tint(stressTint)
 
             HStack(spacing: 8) {
