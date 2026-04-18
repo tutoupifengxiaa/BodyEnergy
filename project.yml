@@ -48,6 +48,8 @@ targets:
         embed: true
     sources:
       - path: BodyEnergy/Watch
+        excludes:
+          - Info.plist
       - path: BodyEnergy/Shared/Models
     settings:
       base:
@@ -62,6 +64,10 @@ targets:
     platform: watchOS
     sources:
       - path: BodyEnergy/Widget
+        excludes:
+          - Info.plist
+          - Info-iOS.plist
+          - "*.entitlements"
       - path: BodyEnergy/Shared/Models/WidgetMetricsSnapshot.swift
     settings:
       base:
@@ -78,6 +84,10 @@ targets:
     platform: iOS
     sources:
       - path: BodyEnergy/Widget
+        excludes:
+          - Info.plist
+          - Info-iOS.plist
+          - "*.entitlements"
       - path: BodyEnergy/Shared/Models/WidgetMetricsSnapshot.swift
     settings:
       base:
