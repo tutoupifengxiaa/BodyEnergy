@@ -47,7 +47,7 @@ struct WorkoutRecommendation: Equatable, Sendable {
                 durationText: "20 到 30 分钟",
                 intensityText: "低到中等强度",
                 purposeText: "维持运动刺激，同时避免过量透支。",
-                cautionText: "今天更适合稳定节奏，而不是追求冲击性强度。",
+                cautionText: "今天更适合稳定节奏，而不是追求冲刺性强度。",
                 steps: [
                     "先做短热身，让身体从静息状态进入运动节奏。",
                     "保持均匀呼吸和可持续强度完成训练主体。",

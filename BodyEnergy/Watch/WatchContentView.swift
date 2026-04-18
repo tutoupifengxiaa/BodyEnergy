@@ -378,7 +378,7 @@ struct WatchContentView: View {
         case .waiting:
             return "等待"
         case .active:
-            return "已连通"
+            return "已连接"
         case .error:
             return "异常"
         }

@@ -38,7 +38,7 @@ struct BodyEnergyComplicationEntryView: View {
     var body: some View {
         switch family {
         case .accessoryInline:
-            Text("Energy \(entry.snapshot.energyScore)")
+            Text("电量 \(entry.snapshot.energyScore)")
         case .accessoryCircular:
             energyGauge
         case .accessoryCorner:
@@ -84,7 +84,7 @@ struct BodyEnergyComplicationEntryView: View {
     private var energyRectangular: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Label("Body Energy", systemImage: "bolt.heart")
+                Label("身体电量", systemImage: "bolt.heart")
                     .font(.caption2.weight(.semibold))
                     .lineLimit(1)
 
@@ -102,8 +102,8 @@ struct BodyEnergyComplicationEntryView: View {
             .tint(energyTint)
 
             HStack(spacing: 8) {
-                metricLabel(title: "Recovery", value: "\(entry.snapshot.recoveryScore)", tint: .blue)
-                metricLabel(title: "State", value: energyLevelTitle, tint: energyTint)
+                metricLabel(title: "恢复", value: "\(entry.snapshot.recoveryScore)", tint: .blue)
+                metricLabel(title: "状态", value: energyLevelTitle, tint: energyTint)
             }
         }
     }
@@ -111,7 +111,7 @@ struct BodyEnergyComplicationEntryView: View {
 #if os(iOS)
     private var energySystemSmall: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Body Energy", systemImage: "bolt.heart.fill")
+            Label("身体电量", systemImage: "bolt.heart.fill")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
@@ -125,9 +125,9 @@ struct BodyEnergyComplicationEntryView: View {
             .tint(energyTint)
 
             HStack {
-                compactMetric(title: "Recovery", value: "\(entry.snapshot.recoveryScore)")
+                compactMetric(title: "恢复", value: "\(entry.snapshot.recoveryScore)")
                 Spacer()
-                compactMetric(title: "State", value: energyLevelTitle)
+                compactMetric(title: "状态", value: energyLevelTitle)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -137,14 +137,14 @@ struct BodyEnergyComplicationEntryView: View {
     private var energySystemMedium: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                Label("Body Energy", systemImage: "bolt.heart.fill")
+                Label("身体电量", systemImage: "bolt.heart.fill")
                     .font(.headline)
 
                 Text(energyLevelTitle)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(energyTint)
 
-                Text("Updated \(entry.date, style: .time)")
+                Text("更新于 \(entry.date, style: .time)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -163,8 +163,8 @@ struct BodyEnergyComplicationEntryView: View {
                 .tint(energyTint)
 
                 HStack(spacing: 12) {
-                    compactMetric(title: "Recovery", value: "\(entry.snapshot.recoveryScore)")
-                    compactMetric(title: "Stress", value: "\(entry.snapshot.stressScore)")
+                    compactMetric(title: "恢复", value: "\(entry.snapshot.recoveryScore)")
+                    compactMetric(title: "压力", value: "\(entry.snapshot.stressScore)")
                 }
             }
         }
@@ -187,11 +187,11 @@ struct BodyEnergyComplicationEntryView: View {
     private var energyLevelTitle: String {
         switch entry.snapshot.energyScore {
         case 70...100:
-            return "Charged"
+            return "充足"
         case 40..<70:
-            return "Steady"
+            return "平稳"
         default:
-            return "Low"
+            return "偏低"
         }
     }
 }
@@ -204,7 +204,7 @@ struct StressComplicationEntryView: View {
     var body: some View {
         switch family {
         case .accessoryInline:
-            Text("Stress \(entry.snapshot.stressScore)")
+            Text("压力 \(entry.snapshot.stressScore)")
         case .accessoryCircular:
             stressGauge
         case .accessoryCorner:
@@ -250,7 +250,7 @@ struct StressComplicationEntryView: View {
     private var stressRectangular: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Label("Stress", systemImage: "brain.head.profile")
+                Label("压力", systemImage: "brain.head.profile")
                     .font(.caption2.weight(.semibold))
                     .lineLimit(1)
 
@@ -268,8 +268,8 @@ struct StressComplicationEntryView: View {
             .tint(stressTint)
 
             HStack(spacing: 8) {
-                metricLabel(title: "Mood", value: stressMoodTitle, tint: stressTint)
-                metricLabel(title: "Level", value: entry.snapshot.stressLevelTitle, tint: stressTint)
+                metricLabel(title: "评语", value: stressMoodTitle, tint: stressTint)
+                metricLabel(title: "等级", value: entry.snapshot.stressLevelTitle, tint: stressTint)
             }
         }
     }
@@ -277,7 +277,7 @@ struct StressComplicationEntryView: View {
 #if os(iOS)
     private var stressSystemSmall: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("Stress", systemImage: "brain.head.profile")
+            Label("压力", systemImage: "brain.head.profile")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
@@ -291,9 +291,9 @@ struct StressComplicationEntryView: View {
             .tint(stressTint)
 
             HStack {
-                compactMetric(title: "Mood", value: stressMoodTitle)
+                compactMetric(title: "评语", value: stressMoodTitle)
                 Spacer()
-                compactMetric(title: "Level", value: entry.snapshot.stressLevelTitle)
+                compactMetric(title: "等级", value: entry.snapshot.stressLevelTitle)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -303,14 +303,14 @@ struct StressComplicationEntryView: View {
     private var stressSystemMedium: some View {
         HStack(spacing: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                Label("Stress", systemImage: "brain.head.profile")
+                Label("压力", systemImage: "brain.head.profile")
                     .font(.headline)
 
                 Text(stressMoodTitle)
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(stressTint)
 
-                Text("Updated \(entry.date, style: .time)")
+                Text("更新于 \(entry.date, style: .time)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -329,8 +329,8 @@ struct StressComplicationEntryView: View {
                 .tint(stressTint)
 
                 HStack(spacing: 12) {
-                    compactMetric(title: "Energy", value: "\(entry.snapshot.energyScore)")
-                    compactMetric(title: "Level", value: entry.snapshot.stressLevelTitle)
+                    compactMetric(title: "电量", value: "\(entry.snapshot.energyScore)")
+                    compactMetric(title: "等级", value: entry.snapshot.stressLevelTitle)
                 }
             }
         }
@@ -355,13 +355,13 @@ struct StressComplicationEntryView: View {
     private var stressMoodTitle: String {
         switch entry.snapshot.stressScore {
         case 0..<30:
-            return "Full Power"
+            return "元气满满"
         case 30..<55:
-            return "Stable"
+            return "节奏稳定"
         case 55..<75:
-            return "Tense"
+            return "稍微紧绷"
         default:
-            return "Recover"
+            return "需要缓缓"
         }
     }
 }
