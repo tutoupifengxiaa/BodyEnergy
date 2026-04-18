@@ -45,41 +45,41 @@ struct ContentView: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let topInset = proxy.safeAreaInsets.top
-            let bottomInset = proxy.safeAreaInsets.bottom
+        ZStack {
+            pageBackground.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                topHeader(topInset: topInset)
+            GeometryReader { proxy in
+                let topInset = proxy.safeAreaInsets.top
+                let bottomInset = proxy.safeAreaInsets.bottom
 
-                ScrollView(.vertical) {
-                    VStack(spacing: 16) {
-                        heroCard
-                        systemStateCard
-                        scoreBreakdownCard
-                        stressCard
-                        trendCard
-                        metricsSection
-                        focusCard
-                        recommendationCard
+                VStack(spacing: 0) {
+                    topHeader(topInset: topInset)
+
+                    ScrollView(.vertical) {
+                        VStack(spacing: 16) {
+                            heroCard
+                            systemStateCard
+                            scoreBreakdownCard
+                            stressCard
+                            trendCard
+                            metricsSection
+                            focusCard
+                            recommendationCard
+                        }
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 8)
+                        .padding(.bottom, max(bottomInset, 28))
                     }
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .padding(.horizontal, 8)
-                    .padding(.top, 8)
-                    .padding(.bottom, max(bottomInset, 28))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    .scrollIndicators(.hidden)
+                    .refreshable {
+                        await store.refreshHealthData()
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .scrollIndicators(.hidden)
-                .refreshable {
-                    await store.refreshHealthData()
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .background {
-                pageBackground.ignoresSafeArea()
             }
         }
-        .ignoresSafeArea()
         .fullScreenCover(isPresented: $isShowingRecommendationDetail) {
             NavigationStack {
                 RecommendationDetailView(recommendation: store.workoutRecommendation)
