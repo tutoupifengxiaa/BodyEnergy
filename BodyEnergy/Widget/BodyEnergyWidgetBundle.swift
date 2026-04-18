@@ -5,5 +5,6 @@ import SwiftUI
 struct BodyEnergyWidgetBundle: WidgetBundle {
     var body: some Widget {
         BodyEnergyComplication()
+        StressComplication()
     }
 }
