@@ -200,12 +200,16 @@ struct WatchContentView: View {
 
                 Spacer(minLength: 6)
 
-                Picker("维度", selection: $stressTrendRange) {
+                HStack(spacing: 4) {
                     ForEach(WatchStressTrendRange.allCases) { range in
-                        Text(range.title).tag(range)
+                        Button {
+                            stressTrendRange = range
+                        } label: {
+                            stressRangeButton(range)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
-                .pickerStyle(.segmented)
                 .frame(width: 92)
             }
 
@@ -353,6 +357,20 @@ struct WatchContentView: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(isSelected ? tint.opacity(0.14) : Color.white.opacity(0.05))
         )
+    }
+
+    private func stressRangeButton(_ range: WatchStressTrendRange) -> some View {
+        let isSelected = stressTrendRange == range
+
+        return Text(range.title)
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundColor(isSelected ? .black : .white)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? Color.white : Color.white.opacity(0.08))
+            )
     }
 
     private var syncBadgeText: String {
