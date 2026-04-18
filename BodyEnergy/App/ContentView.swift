@@ -4,6 +4,9 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var store: AppStore
     @State private var isShowingRecommendationDetail = false
+    @State private var stressRange: StressStatsRange = .day
+    @State private var selectedDailyStressIndex = 6
+    @State private var selectedWeeklyStressIndex = 5
 
     private static let dayFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -60,8 +63,7 @@ struct ContentView: View {
                             heroCard
                             systemStateCard
                             scoreBreakdownCard
-                            stressCard
-                            trendCard
+                            stressInsightsCard
                             metricsSection
                             focusCard
                             recommendationCard
@@ -466,6 +468,91 @@ struct ContentView: View {
         }
     }
 
+    private var stressInsightsCard: some View {
+        let points = visibleStressPoints
+        let selectedPoint = selectedStressPoint
+
+        return VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 12) {
+                sectionHeader(
+                    title: "压力趋势",
+                    subtitle: stressRange == .day
+                        ? "按天查看最近 7 天的压力估算。"
+                        : "按周查看最近 6 周的周均压力。"
+                )
+
+                Spacer(minLength: 8)
+
+                Picker("压力统计维度", selection: $stressRange) {
+                    ForEach(StressStatsRange.allCases) { range in
+                        Text(range.title).tag(range)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 148)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(Array(points.enumerated()), id: \.element.id) { index, point in
+                        Button {
+                            selectStressPoint(at: index)
+                        } label: {
+                            StressSelectionPill(
+                                title: point.badgeTitle,
+                                subtitle: point.badgeSubtitle,
+                                score: point.score,
+                                isSelected: index == selectedStressIndex,
+                                tint: stressColor(for: point.score)
+                            )
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 20) {
+                    stressGauge(point: selectedPoint, size: 186)
+                    stressSummary(point: selectedPoint)
+                }
+
+                VStack(alignment: .leading, spacing: 18) {
+                    stressGauge(point: selectedPoint, size: 210)
+                        .frame(maxWidth: .infinity)
+                    stressSummary(point: selectedPoint)
+                }
+            }
+
+            HStack(spacing: 10) {
+                StressSummaryTile(
+                    title: stressRange == .day ? "7天均值" : "6周均值",
+                    value: "\(averageStressScore(in: points))",
+                    tint: .blue
+                )
+                StressSummaryTile(
+                    title: "最高",
+                    value: "\(points.map(\.score).max() ?? selectedPoint.score)",
+                    tint: .orange
+                )
+                StressSummaryTile(
+                    title: "最低",
+                    value: "\(points.map(\.score).min() ?? selectedPoint.score)",
+                    tint: .green
+                )
+            }
+
+            HStack(spacing: 8) {
+                detailChip(title: "HRV 压力", value: "\(selectedPoint.hrvScore) 分", tint: .teal)
+                detailChip(title: "静息心率", value: "\(selectedPoint.restingScore) 分", tint: .pink)
+                detailChip(title: "即时负荷", value: "\(selectedPoint.acuteScore) 分", tint: .orange)
+            }
+        }
+        .padding(18)
+        .background(cardBackground)
+    }
+
     private var trendCard: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionHeader(title: "近 7 天趋势", subtitle: "基于当前状态推演的恢复走势参考。")
@@ -836,6 +923,298 @@ struct ContentView: View {
         }
     }
 
+    private var visibleStressPoints: [StressHistoryPoint] {
+        switch stressRange {
+        case .day:
+            return dailyStressPoints
+        case .week:
+            return weeklyStressPoints
+        }
+    }
+
+    private var selectedStressIndex: Int {
+        switch stressRange {
+        case .day:
+            return min(selectedDailyStressIndex, max(dailyStressPoints.count - 1, 0))
+        case .week:
+            return min(selectedWeeklyStressIndex, max(weeklyStressPoints.count - 1, 0))
+        }
+    }
+
+    private var selectedStressPoint: StressHistoryPoint {
+        let points = visibleStressPoints
+        guard !points.isEmpty else {
+            return StressHistoryPoint(
+                id: "current",
+                badgeTitle: "今天",
+                badgeSubtitle: "\(Calendar.current.component(.day, from: store.snapshot.updatedAt))",
+                detailTitle: "当前压力",
+                detailSubtitle: "暂无统计",
+                score: stressReading.score,
+                hrvScore: stressReading.hrvStressScore,
+                restingScore: stressReading.restingHeartRateStressScore,
+                acuteScore: stressReading.acuteStressScore
+            )
+        }
+        return points[selectedStressIndex]
+    }
+
+    private var dailyStressPoints: [StressHistoryPoint] {
+        let calendar = Calendar.current
+        let baseDate = store.snapshot.updatedAt
+        let scoreOffsets = [-12, -8, -5, -9, -4, 3, 0]
+        let hrvOffsets = [-10, -6, -4, -7, -3, 2, 0]
+        let restingOffsets = [-4, -3, -1, -2, 0, 2, 0]
+        let acuteOffsets = [-8, -4, -3, -6, -2, 4, 0]
+
+        return scoreOffsets.enumerated().map { index, offset in
+            let dayOffset = index - (scoreOffsets.count - 1)
+            let date = calendar.date(byAdding: .day, value: dayOffset, to: baseDate) ?? baseDate
+            let isToday = dayOffset == 0
+
+            return StressHistoryPoint(
+                id: "day-\(index)",
+                badgeTitle: isToday ? "今天" : shortWeekdayText(for: date),
+                badgeSubtitle: "\(calendar.component(.day, from: date))",
+                detailTitle: fullDayText(for: date),
+                detailSubtitle: isToday ? "当日压力估算" : "日压力估算",
+                score: bounded(stressReading.score + syntheticStressAdjustment(offset), to: 8 ... 95),
+                hrvScore: bounded(stressReading.hrvStressScore + syntheticStressAdjustment(hrvOffsets[index]), to: 5 ... 95),
+                restingScore: bounded(stressReading.restingHeartRateStressScore + syntheticStressAdjustment(restingOffsets[index]), to: 5 ... 95),
+                acuteScore: bounded(stressReading.acuteStressScore + syntheticStressAdjustment(acuteOffsets[index]), to: 5 ... 95)
+            )
+        }
+    }
+
+    private var weeklyStressPoints: [StressHistoryPoint] {
+        let calendar = Calendar.current
+        let baseDate = store.snapshot.updatedAt
+        let scoreOffsets = [-10, -8, -6, -5, -2, 0]
+        let hrvOffsets = [-8, -7, -5, -4, -1, 0]
+        let restingOffsets = [-3, -3, -2, -1, -1, 0]
+        let acuteOffsets = [-7, -6, -4, -3, -1, 0]
+
+        return scoreOffsets.enumerated().map { index, offset in
+            let weekOffset = index - (scoreOffsets.count - 1)
+            let date = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: baseDate) ?? baseDate
+            let weekOfYear = calendar.component(.weekOfYear, from: date)
+            let isCurrentWeek = weekOffset == 0
+
+            return StressHistoryPoint(
+                id: "week-\(index)",
+                badgeTitle: isCurrentWeek ? "本周" : "W\(weekOfYear)",
+                badgeSubtitle: monthDayText(for: date),
+                detailTitle: isCurrentWeek ? "本周平均压力" : "第 \(weekOfYear) 周平均压力",
+                detailSubtitle: isCurrentWeek ? "当前周均估算" : "周均压力估算",
+                score: bounded(stressReading.score + syntheticStressAdjustment(offset), to: 8 ... 95),
+                hrvScore: bounded(stressReading.hrvStressScore + syntheticStressAdjustment(hrvOffsets[index]), to: 5 ... 95),
+                restingScore: bounded(stressReading.restingHeartRateStressScore + syntheticStressAdjustment(restingOffsets[index]), to: 5 ... 95),
+                acuteScore: bounded(stressReading.acuteStressScore + syntheticStressAdjustment(acuteOffsets[index]), to: 5 ... 95)
+            )
+        }
+    }
+
+    private func selectStressPoint(at index: Int) {
+        switch stressRange {
+        case .day:
+            selectedDailyStressIndex = index
+        case .week:
+            selectedWeeklyStressIndex = index
+        }
+    }
+
+    private func averageStressScore(in points: [StressHistoryPoint]) -> Int {
+        guard !points.isEmpty else { return stressReading.score }
+        let total = points.reduce(0) { $0 + $1.score }
+        return total / points.count
+    }
+
+    private func stressGauge(point: StressHistoryPoint, size: CGFloat) -> some View {
+        let progress = CGFloat(point.score) / 100
+        let tint = stressColor(for: point.score)
+
+        return ZStack {
+            Circle()
+                .trim(from: 0.12, to: 0.88)
+                .stroke(Color.primary.opacity(0.08), style: StrokeStyle(lineWidth: 16, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+
+            Circle()
+                .trim(from: 0.12, to: 0.12 + 0.76 * progress)
+                .stroke(
+                    AngularGradient(
+                        colors: [.green, .yellow, .orange, .red],
+                        center: .center
+                    ),
+                    style: StrokeStyle(lineWidth: 16, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+                .animation(.spring(response: 0.4, dampingFraction: 0.82), value: point.score)
+
+            VStack(spacing: 6) {
+                Image(systemName: stressSymbol(for: point.score))
+                    .font(.title2.weight(.semibold))
+                    .foregroundColor(tint)
+
+                Text("\(point.score)")
+                    .font(.system(size: size * 0.26, weight: .bold, design: .rounded))
+
+                Text(point.detailTitle)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                Text(stressSummaryShort(for: point.score))
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(tint)
+            }
+            .padding(.horizontal, 24)
+        }
+        .frame(width: size, height: size)
+    }
+
+    private func stressSummary(point: StressHistoryPoint) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(point.detailSubtitle.uppercased())
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            Text(stressTitle(for: point.score))
+                .font(.title3.weight(.bold))
+                .foregroundColor(stressColor(for: point.score))
+
+            Text(stressDetail(for: point.score))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Label(point.detailTitle, systemImage: "calendar")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+
+            Text(stressTrendCaption(for: point))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func syntheticStressAdjustment(_ offset: Int) -> Int {
+        let sleepEffect = Int((7.0 - store.health.sleepHours) * 2.4)
+        let activityEffect = Int((store.health.activeEnergyKcal - 500) / 180)
+        let hrvEffect = Int((45 - store.health.heartRateVariabilityMS) / 8)
+        return offset + sleepEffect + activityEffect + hrvEffect
+    }
+
+    private func shortWeekdayText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.setLocalizedDateFormatFromTemplate("EEE")
+        return formatter.string(from: date)
+    }
+
+    private func fullDayText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.setLocalizedDateFormatFromTemplate("M月d日 EEEE")
+        return formatter.string(from: date)
+    }
+
+    private func monthDayText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.setLocalizedDateFormatFromTemplate("M/d")
+        return formatter.string(from: date)
+    }
+
+    private func stressTrendCaption(for point: StressHistoryPoint) -> String {
+        let delta = point.score - stressReading.score
+        if delta == 0 {
+            return "和当前压力基本持平，适合继续观察恢复与睡眠表现。"
+        }
+        if delta > 0 {
+            return "比当前高 \(delta) 分，建议优先安排放松和低刺激活动。"
+        }
+        return "比当前低 \(abs(delta)) 分，说明这段时间恢复余量更充足。"
+    }
+
+    private func stressTitle(for score: Int) -> String {
+        switch stressLevel(for: score) {
+        case .low:
+            return "压力较低"
+        case .moderate:
+            return "压力适中"
+        case .elevated:
+            return "压力偏高"
+        case .high:
+            return "压力较高"
+        }
+    }
+
+    private func stressSummaryShort(for score: Int) -> String {
+        switch stressLevel(for: score) {
+        case .low:
+            return "较低"
+        case .moderate:
+            return "适中"
+        case .elevated:
+            return "偏高"
+        case .high:
+            return "较高"
+        }
+    }
+
+    private func stressDetail(for score: Int) -> String {
+        switch stressLevel(for: score) {
+        case .low:
+            return "恢复和自主神经状态都比较在线，今天更适合稳定推进计划。"
+        case .moderate:
+            return "整体仍在可控区间，可以保持节奏，但不必叠加过强刺激。"
+        case .elevated:
+            return "压力已经有上行迹象，更适合做中低强度活动和恢复安排。"
+        case .high:
+            return "当前压力负荷偏高，建议把重点放在补水、步行、拉伸和休息。"
+        }
+    }
+
+    private func stressColor(for score: Int) -> Color {
+        switch stressLevel(for: score) {
+        case .low:
+            return .green
+        case .moderate:
+            return .yellow
+        case .elevated:
+            return .orange
+        case .high:
+            return .red
+        }
+    }
+
+    private func stressLevel(for score: Int) -> StressReading.Level {
+        switch score {
+        case 0..<30:
+            return .low
+        case 30..<55:
+            return .moderate
+        case 55..<75:
+            return .elevated
+        default:
+            return .high
+        }
+    }
+
+    private func stressSymbol(for score: Int) -> String {
+        switch stressLevel(for: score) {
+        case .low:
+            return "face.smiling"
+        case .moderate:
+            return "face.dashed"
+        case .elevated:
+            return "aqi.medium"
+        case .high:
+            return "exclamationmark.circle"
+        }
+    }
+
     private var syncState: SyncState {
         if store.isLoadingHealth {
             return .loading
@@ -878,6 +1257,100 @@ private struct TrendSparkline: View {
                 .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
             }
         }
+    }
+}
+
+private enum StressStatsRange: String, CaseIterable, Identifiable {
+    case day
+    case week
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .day:
+            return "按天"
+        case .week:
+            return "按周"
+        }
+    }
+}
+
+private struct StressHistoryPoint: Identifiable {
+    let id: String
+    let badgeTitle: String
+    let badgeSubtitle: String
+    let detailTitle: String
+    let detailSubtitle: String
+    let score: Int
+    let hrvScore: Int
+    let restingScore: Int
+    let acuteScore: Int
+}
+
+private struct StressSelectionPill: View {
+    let title: String
+    let subtitle: String
+    let score: Int
+    let isSelected: Bool
+    let tint: Color
+
+    var body: some View {
+        VStack(spacing: 8) {
+            Text(title)
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Text(subtitle)
+                .font(.headline.weight(.bold))
+                .foregroundColor(isSelected ? .primary : .secondary)
+
+            Capsule(style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.75), tint],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 30, height: max(6, CGFloat(score) * 0.36))
+        }
+        .frame(width: 60, height: 116, alignment: .bottom)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(isSelected ? tint.opacity(0.12) : Color(.systemBackground).opacity(0.6))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(isSelected ? tint.opacity(0.22) : Color.primary.opacity(0.05), lineWidth: 1)
+        )
+    }
+}
+
+private struct StressSummaryTile: View {
+    let title: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Text(value)
+                .font(.title3.weight(.bold))
+                .foregroundColor(tint)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(tint.opacity(0.10))
+        )
     }
 }
 
