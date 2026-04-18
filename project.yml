@@ -51,8 +51,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.watchkitapp
         PRODUCT_NAME: BodyEnergyWatch
-        GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_WKCompanionAppBundleIdentifier: com.tutoupifengxiaa.BodyEnergy
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: BodyEnergy/Watch/Info.plist
         CODE_SIGN_ENTITLEMENTS: BodyEnergy/Watch/BodyEnergyWatch.entitlements
 
   BodyEnergyWidget:
