@@ -82,16 +82,16 @@ struct BodyEnergyComplicationEntryView: View {
     }
 
     private var energyRectangular: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Label("身体电量", systemImage: "bolt.heart")
-                    .font(.caption2.weight(.semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
 
-                Spacer(minLength: 4)
+                Spacer(minLength: 2)
 
                 Text("\(entry.snapshot.energyScore)")
-                    .font(.title3.weight(.bold))
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(energyTint)
             }
 
@@ -102,9 +102,10 @@ struct BodyEnergyComplicationEntryView: View {
             .tint(energyTint)
 
             Text(energyLevelTitle)
-                .font(.caption.weight(.semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(energyTint)
                 .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
     }
 
@@ -249,16 +250,16 @@ struct StressComplicationEntryView: View {
     }
 
     private var stressRectangular: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Label("压力", systemImage: "brain.head.profile")
-                    .font(.caption2.weight(.semibold))
+                    .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
 
-                Spacer(minLength: 4)
+                Spacer(minLength: 2)
 
                 Text("\(entry.snapshot.stressScore)")
-                    .font(.title3.weight(.bold))
+                    .font(.system(size: 24, weight: .bold, design: .rounded))
                     .foregroundStyle(stressTint)
             }
 
@@ -269,9 +270,10 @@ struct StressComplicationEntryView: View {
             .tint(stressTint)
 
             Text(stressMoodTitle)
-                .font(.caption.weight(.semibold))
+                .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(stressTint)
                 .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
     }
 
