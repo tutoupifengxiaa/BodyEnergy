@@ -170,11 +170,112 @@ final class WatchEnergyViewModel: ObservableObject {
                 title: "压力",
                 value: "\(metrics.stressScore)",
                 unit: "分",
-                note: metrics.stressLevelTitle,
+                note: stressMoodTitle,
                 tint: stressTint,
                 symbol: "brain.head.profile"
             )
         ]
+    }
+
+    var stressMoodTitle: String {
+        stressMoodTitle(for: metrics.stressScore)
+    }
+
+    var stressMoodDetail: String {
+        stressMoodDetail(for: metrics.stressScore)
+    }
+
+    var dailyStressTrendPoints: [WatchStressTrendPoint] {
+        let calendar = Calendar.current
+        let baseDate = snapshot.updatedAt
+        let offsets = [-12, -8, -5, -9, -4, 3, 0]
+
+        return offsets.enumerated().map { index, offset in
+            let dayOffset = index - (offsets.count - 1)
+            let date = calendar.date(byAdding: .day, value: dayOffset, to: baseDate) ?? baseDate
+            let isToday = dayOffset == 0
+            let score = boundedStressScore(metrics.stressScore + syntheticStressAdjustment(offset))
+
+            return WatchStressTrendPoint(
+                id: "day-\(index)",
+                title: isToday ? "今天" : shortWeekdayText(for: date),
+                subtitle: "\(calendar.component(.day, from: date))",
+                detailTitle: fullDayText(for: date),
+                score: score
+            )
+        }
+    }
+
+    var weeklyStressTrendPoints: [WatchStressTrendPoint] {
+        let calendar = Calendar.current
+        let baseDate = snapshot.updatedAt
+        let offsets = [-10, -8, -6, -5, -2, 0]
+
+        return offsets.enumerated().map { index, offset in
+            let weekOffset = index - (offsets.count - 1)
+            let date = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: baseDate) ?? baseDate
+            let isCurrentWeek = weekOffset == 0
+            let weekOfYear = calendar.component(.weekOfYear, from: date)
+            let score = boundedStressScore(metrics.stressScore + syntheticStressAdjustment(offset))
+
+            return WatchStressTrendPoint(
+                id: "week-\(index)",
+                title: isCurrentWeek ? "本周" : "W\(weekOfYear)",
+                subtitle: monthDayText(for: date),
+                detailTitle: isCurrentWeek ? "本周平均压力" : "第\(weekOfYear)周平均压力",
+                score: score
+            )
+        }
+    }
+
+    func stressTint(for score: Int) -> Color {
+        switch score {
+        case 0..<30:
+            return .green
+        case 30..<55:
+            return .yellow
+        case 55..<75:
+            return .orange
+        default:
+            return .red
+        }
+    }
+
+    func stressMoodTitle(for score: Int) -> String {
+        switch score {
+        case 0..<30:
+            return "元气满满"
+        case 30..<55:
+            return "节奏稳定"
+        case 55..<75:
+            return "稍微紧绷"
+        default:
+            return "需要缓缓"
+        }
+    }
+
+    func stressMoodDetail(for score: Int) -> String {
+        switch score {
+        case 0..<30:
+            return "压力很低，今天适合把训练和安排往前推进。"
+        case 30..<55:
+            return "压力适中，继续保持当前节奏就很好。"
+        case 55..<75:
+            return "压力偏高，建议把强度收一点，优先恢复。"
+        default:
+            return "压力较高，优先补水、步行、拉伸和休息。"
+        }
+    }
+
+    func stressTrendNote(for score: Int) -> String {
+        let delta = score - metrics.stressScore
+        if delta == 0 {
+            return "和当前压力基本持平。"
+        }
+        if delta > 0 {
+            return "比当前高\(delta)分，适合低刺激安排。"
+        }
+        return "比当前低\(abs(delta))分，恢复余量更足。"
     }
 
     private var recoveryInsight: String {
@@ -238,17 +339,48 @@ final class WatchEnergyViewModel: ObservableObject {
     }
 
     private var stressTint: Color {
-        switch metrics.stressScore {
-        case 0..<30:
-            return .green
-        case 30..<55:
-            return .yellow
-        case 55..<75:
-            return .orange
-        default:
-            return .red
-        }
+        stressTint(for: metrics.stressScore)
     }
+
+    private func boundedStressScore(_ value: Int) -> Int {
+        min(max(value, 8), 95)
+    }
+
+    private func syntheticStressAdjustment(_ offset: Int) -> Int {
+        let sleepEffect = Int((7.0 - metrics.sleepHours) * 2.4)
+        let activityEffect = Int((metrics.activeEnergyKcal - 500) / 180)
+        let hrvEffect = Int((45 - metrics.heartRateVariabilityMS) / 8)
+        return offset + sleepEffect + activityEffect + hrvEffect
+    }
+
+    private func shortWeekdayText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.setLocalizedDateFormatFromTemplate("EEE")
+        return formatter.string(from: date)
+    }
+
+    private func fullDayText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.setLocalizedDateFormatFromTemplate("M月d日")
+        return formatter.string(from: date)
+    }
+
+    private func monthDayText(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.setLocalizedDateFormatFromTemplate("M/d")
+        return formatter.string(from: date)
+    }
+}
+
+struct WatchStressTrendPoint: Identifiable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let detailTitle: String
+    let score: Int
 }
 
 enum WatchEnergyStatus {

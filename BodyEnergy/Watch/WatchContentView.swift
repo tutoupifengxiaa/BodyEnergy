@@ -2,6 +2,9 @@ import SwiftUI
 
 struct WatchContentView: View {
     @EnvironmentObject private var viewModel: WatchEnergyViewModel
+    @State private var stressTrendRange: WatchStressTrendRange = .day
+    @State private var selectedDailyStressIndex = 6
+    @State private var selectedWeeklyStressIndex = 5
 
     var body: some View {
         TabView {
@@ -21,6 +24,7 @@ struct WatchContentView: View {
             VStack(spacing: 8) {
                 headerRow
                 scoreCard
+                stressTrendCard
 
                 if let sampleScenarioTitle = viewModel.sampleScenarioTitle {
                     sectionCard(
@@ -185,6 +189,90 @@ struct WatchContentView: View {
         )
     }
 
+    private var stressTrendCard: some View {
+        let point = selectedStressPoint
+        let tint = viewModel.stressTint(for: point.score)
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("压力趋势")
+                    .font(.footnote.weight(.semibold))
+
+                Spacer(minLength: 6)
+
+                Picker("维度", selection: $stressTrendRange) {
+                    ForEach(WatchStressTrendRange.allCases) { range in
+                        Text(range.title).tag(range)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 92)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(Array(visibleStressPoints.enumerated()), id: \.element.id) { index, point in
+                        Button {
+                            selectStressPoint(at: index)
+                        } label: {
+                            stressTrendPill(point: point, isSelected: index == selectedStressIndex)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
+            HStack(alignment: .center, spacing: 10) {
+                ZStack {
+                    Circle()
+                        .trim(from: 0.12, to: 0.88)
+                        .stroke(Color.white.opacity(0.10), style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+
+                    Circle()
+                        .trim(from: 0.12, to: 0.12 + 0.76 * CGFloat(point.score) / 100)
+                        .stroke(tint, style: StrokeStyle(lineWidth: 9, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+
+                    VStack(spacing: 1) {
+                        Text("\(point.score)")
+                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                        Text(point.title)
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .frame(width: 76, height: 76)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(viewModel.stressMoodTitle(for: point.score))
+                        .font(.caption.weight(.semibold))
+                        .foregroundColor(tint)
+
+                    Text(point.detailTitle)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(.primary)
+
+                    Text(viewModel.stressMoodDetail(for: point.score))
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(3)
+
+                    Text(viewModel.stressTrendNote(for: point.score))
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(tint)
+                        .lineLimit(2)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(tint.opacity(0.12))
+        )
+    }
+
     private var actionCard: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("当前建议")
@@ -199,6 +287,71 @@ struct WatchContentView: View {
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(bodyStatusColor.opacity(0.14))
+        )
+    }
+
+    private var visibleStressPoints: [WatchStressTrendPoint] {
+        switch stressTrendRange {
+        case .day:
+            return viewModel.dailyStressTrendPoints
+        case .week:
+            return viewModel.weeklyStressTrendPoints
+        }
+    }
+
+    private var selectedStressIndex: Int {
+        switch stressTrendRange {
+        case .day:
+            return min(selectedDailyStressIndex, max(viewModel.dailyStressTrendPoints.count - 1, 0))
+        case .week:
+            return min(selectedWeeklyStressIndex, max(viewModel.weeklyStressTrendPoints.count - 1, 0))
+        }
+    }
+
+    private var selectedStressPoint: WatchStressTrendPoint {
+        let points = visibleStressPoints
+        guard !points.isEmpty else {
+            return WatchStressTrendPoint(
+                id: "current",
+                title: "今天",
+                subtitle: "\(Calendar.current.component(.day, from: viewModel.snapshot.updatedAt))",
+                detailTitle: "当前压力",
+                score: viewModel.metrics.stressScore
+            )
+        }
+        return points[selectedStressIndex]
+    }
+
+    private func selectStressPoint(at index: Int) {
+        switch stressTrendRange {
+        case .day:
+            selectedDailyStressIndex = index
+        case .week:
+            selectedWeeklyStressIndex = index
+        }
+    }
+
+    private func stressTrendPill(point: WatchStressTrendPoint, isSelected: Bool) -> some View {
+        let tint = viewModel.stressTint(for: point.score)
+
+        return VStack(spacing: 4) {
+            Text(point.title)
+                .font(.system(size: 8, weight: .medium))
+                .foregroundColor(.secondary)
+
+            Text(point.subtitle)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundColor(isSelected ? .primary : .secondary)
+
+            Capsule(style: .continuous)
+                .fill(tint)
+                .frame(width: 18, height: max(6, CGFloat(point.score) * 0.25))
+        }
+        .frame(width: 42, height: 68, alignment: .bottom)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isSelected ? tint.opacity(0.14) : Color.white.opacity(0.05))
         )
     }
 
@@ -314,6 +467,22 @@ struct WatchContentView: View {
             .multilineTextAlignment(.center)
             .lineLimit(3)
             .frame(maxWidth: .infinity)
+    }
+}
+
+private enum WatchStressTrendRange: String, CaseIterable, Identifiable {
+    case day
+    case week
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .day:
+            return "天"
+        case .week:
+            return "周"
+        }
     }
 }
 
