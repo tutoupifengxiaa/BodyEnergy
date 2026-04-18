@@ -416,8 +416,8 @@ struct BodyEnergyComplication: Widget {
         StaticConfiguration(kind: kind, provider: BodyEnergyWidgetProvider()) { entry in
             BodyEnergyComplicationEntryView(entry: entry)
         }
-        .configurationDisplayName("Body Energy")
-        .description("Shows current body energy and recovery.")
+        .configurationDisplayName("身体电量")
+        .description("显示当前身体电量与恢复状态。")
         .supportedFamilies(energySupportedFamilies)
     }
 }
@@ -429,8 +429,8 @@ struct StressComplication: Widget {
         StaticConfiguration(kind: kind, provider: BodyEnergyWidgetProvider()) { entry in
             StressComplicationEntryView(entry: entry)
         }
-        .configurationDisplayName("Stress")
-        .description("Shows current stress level and mood.")
+        .configurationDisplayName("压力")
+        .description("显示当前压力值与状态评语。")
         .supportedFamilies(energySupportedFamilies)
     }
 }
