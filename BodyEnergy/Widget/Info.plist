@@ -9,7 +9,7 @@
     <key>NSExtensionAttributes</key>
     <dict>
       <key>WKAppBundleIdentifier</key>
-      <string>com.tutoupifengxiaa.BodyEnergy.watchkitapp</string>
+      <string>com.tutoupifengxiaa.BodyEnergy</string>
     </dict>
     <key>NSExtensionPointIdentifier</key>
     <string>com.apple.widgetkit-extension</string>
