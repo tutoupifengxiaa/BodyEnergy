@@ -63,7 +63,7 @@ targets:
       - path: BodyEnergy/Shared/Models/WidgetMetricsSnapshot.swift
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.watchkitapp.complication
+        PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.watchkitapp.widget
         PRODUCT_NAME: BodyEnergyWidget
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: BodyEnergy/Widget/Info.plist
