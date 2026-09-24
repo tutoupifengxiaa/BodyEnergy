@@ -17,8 +17,9 @@ struct EnergyScorer {
         let input = sanitize(rawInput)
         let recovery = recoveryScore(for: input)
         let fatigue = fatigueScore(for: input)
+        // A rest day or an early morning must not lose points for low activity.
         let activityBalance = centeredScore(
-            input.activeEnergyKcal,
+            max(input.activeEnergyKcal, config.baselines.targetActiveEnergyKcal),
             target: config.baselines.targetActiveEnergyKcal,
             tolerance: config.baselines.activityBalanceToleranceKcal
         )
@@ -64,15 +65,22 @@ struct EnergyScorer {
 
     private func recoveryScore(for input: EnergyInput) -> Double {
         let sleepQuality = sleepScore(for: input.sleepHours)
-        let hrvScore = ratioScore(input.heartRateVariabilityMS, target: config.baselines.targetHRV, slope: 2.0)
+        let severeSleepShortfall = max(0, config.baselines.restorativeSleepFloorHours - input.sleepHours)
+            / max(config.baselines.restorativeSleepFloorHours, 1)
+        let targetScore = bounded(config.baselines.recoveryMarkerScoreAtTarget, to: 0.01...0.99)
+        let recoveryBias = log(targetScore / (1 - targetScore))
+        let hrvScore = ratioScore(input.heartRateVariabilityMS, target: config.baselines.targetHRV,
+                                 slope: 2.0, bias: recoveryBias)
         let restingHeartRateScore = inverseRatioScore(
             input.restingHeartRateBPM,
             target: config.baselines.targetRestingHeartRate,
-            slope: 2.3
+            slope: 2.3,
+            bias: recoveryBias
         )
 
         return weighted(
-            [sleepQuality, hrvScore, restingHeartRateScore],
+            // Keep reducing recovery after the usual sleep credit reaches zero.
+            [sleepQuality - severeSleepShortfall, hrvScore, restingHeartRateScore],
             [config.weights.recoverySleep, config.weights.recoveryHRV, config.weights.recoveryRHR]
         )
     }
@@ -102,8 +110,9 @@ struct EnergyScorer {
     }
 
     private func sleepScore(for sleepHours: Double) -> Double {
+        // Duration credit saturates at the target; longer sleep adds no penalty or bonus.
         let durationScore = centeredScore(
-            sleepHours,
+            min(sleepHours, config.baselines.targetSleepHours),
             target: config.baselines.targetSleepHours,
             tolerance: 2.0
         )
@@ -120,14 +129,14 @@ struct EnergyScorer {
         return bounded(shortfall / restorativeWindow, to: 0...1)
     }
 
-    private func ratioScore(_ value: Double, target: Double, slope: Double) -> Double {
+    private func ratioScore(_ value: Double, target: Double, slope: Double, bias: Double = 0) -> Double {
         guard target > 0 else { return 0.5 }
-        return sigmoid(((value / target) - 1) * slope)
+        return sigmoid(((value / target) - 1) * slope + bias)
     }
 
-    private func inverseRatioScore(_ value: Double, target: Double, slope: Double) -> Double {
+    private func inverseRatioScore(_ value: Double, target: Double, slope: Double, bias: Double) -> Double {
         guard target > 0 else { return 0.5 }
-        return sigmoid((1 - (value / target)) * slope)
+        return sigmoid((1 - (value / target)) * slope + bias)
     }
 
     private func centeredScore(_ value: Double, target: Double, tolerance: Double) -> Double {

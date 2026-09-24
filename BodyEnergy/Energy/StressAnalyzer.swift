@@ -16,6 +16,8 @@ struct StressReading: Equatable, Sendable {
 }
 
 struct StressAnalyzer {
+    private static let heartRatePairingWindow: TimeInterval = 30 * 60
+
     let config: EnergyConfig
 
     init(config: EnergyConfig = .default) {
@@ -28,6 +30,33 @@ struct StressAnalyzer {
             restingHeartRateBPM: snapshot.restingHeartRateBPM,
             currentHeartRateBPM: snapshot.heartRateBPM
         )
+    }
+
+    func evaluateAvailable(snapshot: HealthSnapshot, now: Date = .now) -> (reading: StressReading, snapshot: StressSnapshot)? {
+        guard snapshot.isUsable(.hrv, at: now), let hrvDate = snapshot.sampleDates[.hrv] else { return nil }
+        // Resting heart rate is a daily baseline; current heart rate must be paired with the HRV sample.
+        if snapshot.isUsable(.heartRate, at: now), snapshot.isUsable(.restingHeartRate, at: now),
+           let heartRateDate = snapshot.sampleDates[.heartRate],
+           let restingHeartRateDate = snapshot.sampleDates[.restingHeartRate],
+           abs(heartRateDate.timeIntervalSince(hrvDate)) <= Self.heartRatePairingWindow {
+            let reading = evaluate(snapshot: snapshot)
+            let expiry = min(hrvDate.addingTimeInterval(HealthMetric.hrv.maxAge),
+                             heartRateDate.addingTimeInterval(HealthMetric.heartRate.maxAge),
+                             restingHeartRateDate.addingTimeInterval(HealthMetric.restingHeartRate.maxAge))
+            return (reading, StressSnapshot(score: reading.score, levelTitle: reading.level.title,
+                updatedAt: max(hrvDate, heartRateDate), validUntil: expiry, basis: "HRV 与心率估算"))
+        }
+
+        let score = evaluate(hrvMS: snapshot.heartRateVariabilityMS)
+        let reading = StressReading(score: score, level: level(for: score), hrvStressScore: score,
+                                    restingHeartRateStressScore: 0, acuteStressScore: 0)
+        return (reading, StressSnapshot(score: reading.score, levelTitle: reading.level.title,
+            updatedAt: hrvDate, validUntil: hrvDate.addingTimeInterval(HealthMetric.hrv.maxAge), basis: "HRV 估算"))
+    }
+
+    func evaluate(hrvMS: Double) -> Int {
+        Int((inverseRatioScore(hrvMS.clamped(to: config.hrvValidRange),
+                               target: config.baselines.targetHRV, slope: 2.6) * 100).rounded()).clamped(to: 0...100)
     }
 
     func evaluate(hrvMS: Double, restingHeartRateBPM: Double, currentHeartRateBPM: Double) -> StressReading {

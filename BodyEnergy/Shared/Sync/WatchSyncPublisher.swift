@@ -1,112 +1,106 @@
 import Foundation
 
-protocol WatchSyncPublishing {
-    func publish(
-        snapshot: EnergySnapshot,
-        workoutRecommendation: WorkoutRecommendation,
-        metrics: WatchKeyMetricsSnapshot,
-        stressScore: Int,
-        stressLevelTitle: String,
-        sampleScenarioTitle: String?,
-        sampleScenarioSummary: String?,
-        bodyStatus: BodyStatusDescriptor
-    )
+@MainActor
+protocol WatchSyncPublishing: AnyObject {
+    var onRefreshRequested: (@MainActor () async -> Void)? { get set }
+    func publish(_ payload: WatchSyncPayload)
 }
 
-struct NoopWatchSyncPublisher: WatchSyncPublishing {
-    func publish(
-        snapshot: EnergySnapshot,
-        workoutRecommendation: WorkoutRecommendation,
-        metrics: WatchKeyMetricsSnapshot,
-        stressScore: Int,
-        stressLevelTitle: String,
-        sampleScenarioTitle: String?,
-        sampleScenarioSummary: String?,
-        bodyStatus: BodyStatusDescriptor
-    ) {}
+@MainActor
+final class NoopWatchSyncPublisher: WatchSyncPublishing {
+    var onRefreshRequested: (@MainActor () async -> Void)?
+    func publish(_ payload: WatchSyncPayload) {}
 }
 
 #if os(iOS)
 import WatchConnectivity
+import UIKit
 
+@MainActor
 final class WatchSyncPublisheriOS: NSObject, WatchSyncPublishing, WCSessionDelegate {
+    var onRefreshRequested: (@MainActor () async -> Void)?
     private let session: WCSession?
     private var latestPayload: WatchSyncPayload?
+    private let cacheKey = "watch.outgoing.payload.v2"
 
     override init() {
-        if WCSession.isSupported() {
-            self.session = WCSession.default
-        } else {
-            self.session = nil
-        }
+        session = WCSession.isSupported() ? .default : nil
         super.init()
-
+        if let data = UserDefaults.standard.data(forKey: cacheKey),
+           let payload = try? JSONDecoder().decode(WatchSyncPayload.self, from: data),
+           !payload.isSampleData, payload.sampleScenarioTitle == nil {
+            latestPayload = payload
+        }
         session?.delegate = self
         session?.activate()
     }
 
-    func publish(
-        snapshot: EnergySnapshot,
-        workoutRecommendation: WorkoutRecommendation,
-        metrics: WatchKeyMetricsSnapshot,
-        stressScore: Int,
-        stressLevelTitle: String,
-        sampleScenarioTitle: String?,
-        sampleScenarioSummary: String?,
-        bodyStatus: BodyStatusDescriptor
-    ) {
-        let payload = WatchSyncPayload(
-            snapshot: snapshot,
-            workoutRecommendation: workoutRecommendation,
-            metrics: metrics,
-            stressScore: stressScore,
-            stressLevelTitle: stressLevelTitle,
-            sampleScenarioTitle: sampleScenarioTitle,
-            sampleScenarioSummary: sampleScenarioSummary,
-            bodyStatus: bodyStatus
-        )
+    func publish(_ payload: WatchSyncPayload) {
         latestPayload = payload
-        pushLatestPayloadIfPossible()
-    }
-
-    func sessionDidBecomeInactive(_ session: WCSession) {}
-
-    func sessionDidDeactivate(_ session: WCSession) {
-        session.activate()
-    }
-
-    func session(
-        _ session: WCSession,
-        activationDidCompleteWith activationState: WCSessionActivationState,
-        error: Error?
-    ) {
-        guard error == nil, activationState == .activated else { return }
-        pushLatestPayloadIfPossible()
-    }
-
-    func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
-        guard let request = message["request"] as? String, request == "latestEnergy" else { return }
-        pushLatestPayloadIfPossible()
-    }
-}
-
-private extension WatchSyncPublisheriOS {
-    func pushLatestPayloadIfPossible() {
-        guard let session, let latestPayload else { return }
-        guard session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
-
-        do {
-            try session.updateApplicationContext(latestPayload.applicationContext)
-        } catch {
-            return
+        if let data = try? JSONEncoder().encode(payload) {
+            UserDefaults.standard.set(data, forKey: cacheKey)
         }
+        pushLatestPayloadIfPossible()
+    }
 
-        guard session.isReachable else { return }
-        session.sendMessage(latestPayload.applicationContext, replyHandler: nil) { _ in }
+    nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
+    nonisolated func sessionDidDeactivate(_ session: WCSession) { session.activate() }
+    nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        guard error == nil, activationState == .activated else { return }
+        Task { @MainActor in self.pushLatestPayloadIfPossible() }
+    }
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        guard message["request"] as? String == "latestEnergy" else { return }
+        Task { @MainActor in
+            await self.onRefreshRequested?()
+            self.pushLatestPayloadIfPossible()
+        }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any], replyHandler: @escaping ([String: Any]) -> Void) {
+        guard message["request"] as? String == "latestEnergy" else { replyHandler([:]); return }
+        Task { @MainActor in
+            await self.onRefreshRequested?()
+            replyHandler(self.latestPayload?.applicationContext ?? [:])
+            self.pushLatestPayloadIfPossible()
+        }
+    }
+
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        Task { @MainActor in self.pushLatestPayloadIfPossible() }
+    }
+
+    nonisolated func sessionWatchStateDidChange(_ session: WCSession) {
+        Task { @MainActor in self.pushLatestPayloadIfPossible() }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
+        guard userInfo["request"] as? String == "latestEnergy" else { return }
+        Task { @MainActor in
+            let application = UIApplication.shared
+            var taskID = UIBackgroundTaskIdentifier.invalid
+            taskID = application.beginBackgroundTask(withName: "Watch health sync") {
+                if taskID != .invalid {
+                    application.endBackgroundTask(taskID)
+                    taskID = .invalid
+                }
+            }
+            defer { if taskID != .invalid { application.endBackgroundTask(taskID) } }
+            await self.onRefreshRequested?()
+            self.pushLatestPayloadIfPossible()
+        }
+    }
+
+    private func pushLatestPayloadIfPossible() {
+        guard let session, let latestPayload,
+              session.activationState == .activated, session.isPaired, session.isWatchAppInstalled else { return }
+        try? session.updateApplicationContext(latestPayload.applicationContext)
+        if session.isReachable { session.sendMessage(latestPayload.applicationContext, replyHandler: nil) { _ in } }
     }
 }
 #endif
 
+@MainActor
 enum WatchSyncPublisherFactory {
     static func makeDefault() -> WatchSyncPublishing {
         #if os(iOS)

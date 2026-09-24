@@ -1,11 +1,45 @@
 import Foundation
 
-struct HealthSnapshot: Equatable, Sendable {
+struct HealthSnapshot: Codable, Equatable, Sendable {
     var heartRateBPM: Double
     var heartRateVariabilityMS: Double
     var restingHeartRateBPM: Double
     var sleepHours: Double
     var activeEnergyKcal: Double
+
+    var sampleDates: [HealthMetric: Date] = [:]
+    var missingMetrics: Set<HealthMetric> = []
+
+    static let empty = HealthSnapshot(
+        heartRateBPM: 0, heartRateVariabilityMS: 0, restingHeartRateBPM: 0,
+        sleepHours: 0, activeEnergyKcal: 0, missingMetrics: Set(HealthMetric.allCases)
+    )
+
+    var measuredAt: Date? { sampleDates.values.max() }
+    var validUntil: Date? {
+        guard missingMetrics.isEmpty, sampleDates.count == HealthMetric.allCases.count else { return nil }
+        return sampleDates.map { $0.value.addingTimeInterval($0.key.maxAge) }.min()
+    }
+
+    func isUsable(at date: Date) -> Bool {
+        guard let validUntil, validUntil >= date else { return false }
+        return sampleDates.values.allSatisfy { $0 <= date.addingTimeInterval(300) }
+            && [heartRateBPM, heartRateVariabilityMS, restingHeartRateBPM, sleepHours, activeEnergyKcal].allSatisfy { $0.isFinite && $0 >= 0 }
+    }
+
+    func isUsable(_ metric: HealthMetric, at date: Date) -> Bool {
+        guard !missingMetrics.contains(metric), let sampledAt = sampleDates[metric],
+              sampledAt <= date.addingTimeInterval(300), sampledAt.addingTimeInterval(metric.maxAge) >= date else { return false }
+        let value: Double
+        switch metric {
+        case .heartRate: value = heartRateBPM
+        case .hrv: value = heartRateVariabilityMS
+        case .restingHeartRate: value = restingHeartRateBPM
+        case .sleep: value = sleepHours
+        case .activeEnergy: value = activeEnergyKcal
+        }
+        return value.isFinite && (metric == .activeEnergy ? value >= 0 : value > 0)
+    }
 
     static let baseline = HealthSnapshot(
         heartRateBPM: 72,
@@ -78,55 +112,26 @@ struct BodyStatusDescriptor: Codable, Equatable, Sendable {
     }
 }
 
-enum SampleScenario: String, CaseIterable, Identifiable, Sendable {
-    case recoveryReady
-    case balanced
-    case recoveryNeeded
-
-    var id: String { rawValue }
+// Display freshness limits, not medical thresholds.
+enum HealthMetric: String, Codable, CaseIterable, Sendable {
+    case heartRate, hrv, restingHeartRate, sleep, activeEnergy
 
     var title: String {
         switch self {
-        case .recoveryReady:
-            return "恢复良好"
-        case .balanced:
-            return "状态平稳"
-        case .recoveryNeeded:
-            return "恢复不足"
+        case .heartRate: return "最近心率"
+        case .hrv: return "HRV"
+        case .restingHeartRate: return "静息心率"
+        case .sleep: return "睡眠"
+        case .activeEnergy: return "活动消耗"
         }
     }
 
-    var summary: String {
+    var maxAge: TimeInterval {
         switch self {
-        case .recoveryReady:
-            return "睡眠和 HRV 表现都比较好，适合查看高身体电量时的页面表现。"
-        case .balanced:
-            return "恢复和活动负荷比较均衡，适合查看中等身体电量下的典型状态。"
-        case .recoveryNeeded:
-            return "睡眠不足、HRV 偏低且活动负荷偏高，适合查看低身体电量场景。"
-        }
-    }
-
-    var snapshot: HealthSnapshot {
-        switch self {
-        case .recoveryReady:
-            return HealthSnapshot(
-                heartRateBPM: 64,
-                heartRateVariabilityMS: 78,
-                restingHeartRateBPM: 52,
-                sleepHours: 8.4,
-                activeEnergyKcal: 420
-            )
-        case .balanced:
-            return .baseline
-        case .recoveryNeeded:
-            return HealthSnapshot(
-                heartRateBPM: 92,
-                heartRateVariabilityMS: 28,
-                restingHeartRateBPM: 72,
-                sleepHours: 5.3,
-                activeEnergyKcal: 980
-            )
+        case .heartRate: return 6 * 3600
+        case .hrv, .sleep: return 36 * 3600
+        case .restingHeartRate: return 48 * 3600
+        case .activeEnergy: return 24 * 3600
         }
     }
 }

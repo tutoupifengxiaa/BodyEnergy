@@ -6,6 +6,8 @@ struct EnergyConfig: Sendable {
         var restorativeSleepFloorHours: Double = 6.0
         var targetHRV: Double = 60.0
         var targetRestingHeartRate: Double = 55.0
+        // Product scoring calibration; these targets are not personal baselines.
+        var recoveryMarkerScoreAtTarget: Double = 0.8
         var targetTrainingHeartRate: Double = 140.0
         var targetActiveEnergyKcal: Double = 650.0
         var activityBalanceToleranceKcal: Double = 260.0

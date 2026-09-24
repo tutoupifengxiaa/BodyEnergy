@@ -1,6 +1,6 @@
 import Foundation
 
-struct WorkoutRecommendation: Equatable, Sendable {
+struct WorkoutRecommendation: Codable, Equatable, Sendable {
     var title: String
     var summary: String
     var durationText: String
@@ -8,6 +8,18 @@ struct WorkoutRecommendation: Equatable, Sendable {
     var purposeText: String
     var cautionText: String
     var steps: [String]
+
+    static let empty = WorkoutRecommendation(
+        title: "暂无建议", summary: "等待健康数据后生成运动建议。",
+        durationText: "—", intensityText: "—", purposeText: "", cautionText: "", steps: []
+    )
+
+    static let generalActivity = WorkoutRecommendation(
+        title: "轻松步行或拉伸", summary: "通用轻活动建议，按舒适程度安排。",
+        durationText: "量力安排", intensityText: "轻强度",
+        purposeText: "日常轻活动参考。", cautionText: "感觉不适时停止活动。",
+        steps: ["从短时间的轻松步行开始。", "按舒适程度放缓或休息。", "也可选择轻柔拉伸。"]
+    )
 
     static let preview = WorkoutRecommendation(
         title: "二区有氧恢复课",

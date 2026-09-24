@@ -1,10 +1,12 @@
-﻿import Foundation
+import Foundation
 
-struct EnergySnapshot: Equatable, Sendable {
+struct EnergySnapshot: Codable, Equatable, Sendable {
     var energyScore: Int
     var recoveryScore: Int
     var recommendation: String
     var updatedAt: Date
+
+    static let empty = EnergySnapshot(energyScore: 0, recoveryScore: 0, recommendation: "", updatedAt: .distantPast)
 
     static let preview = EnergySnapshot(
         energyScore: 78,

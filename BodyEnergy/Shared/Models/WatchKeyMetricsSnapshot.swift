@@ -8,12 +8,14 @@ struct WatchKeyMetricsSnapshot: Codable, Equatable, Sendable {
     var activeEnergyKcal: Double
     var stressScore: Int
     var stressLevelTitle: String
+    var health: HealthSnapshot? = nil
 
     init(
         health: HealthSnapshot,
         stressScore: Int,
         stressLevelTitle: String
     ) {
+        self.health = health
         self.heartRateBPM = health.heartRateBPM
         self.heartRateVariabilityMS = health.heartRateVariabilityMS
         self.restingHeartRateBPM = health.restingHeartRateBPM
@@ -40,6 +42,8 @@ struct WatchKeyMetricsSnapshot: Codable, Equatable, Sendable {
         self.stressScore = stressScore
         self.stressLevelTitle = stressLevelTitle
     }
+
+    static let empty = WatchKeyMetricsSnapshot(health: .empty, stressScore: 0, stressLevelTitle: "暂无评分")
 
     static let preview = WatchKeyMetricsSnapshot(
         heartRateBPM: 72,

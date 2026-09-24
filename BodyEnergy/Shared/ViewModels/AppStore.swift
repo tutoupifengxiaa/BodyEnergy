@@ -4,6 +4,7 @@ import Foundation
 import WidgetKit
 #endif
 
+@MainActor
 final class AppStore: ObservableObject {
     @Published var health: HealthSnapshot
     @Published var snapshot: EnergySnapshot
@@ -11,141 +12,221 @@ final class AppStore: ObservableObject {
     @Published var workoutRecommendation: WorkoutRecommendation
     @Published var isLoadingHealth = false
     @Published var healthErrorMessage: String?
-    @Published var sampleScenario: SampleScenario?
+    @Published private(set) var hasScore = false
+    @Published private(set) var history: [DailyMetrics] = []
+    @Published private(set) var hourlyStress: [HourlyStress] = []
+    @Published private(set) var lastRefreshAt: Date?
+    @Published private(set) var scoreValidUntil: Date?
+    @Published private(set) var pressure: StressSnapshot?
+
+    var hasPressure: Bool { pressure != nil }
+    var isPressureStale: Bool { pressure?.isStale ?? true }
+    var hasCurrentRecommendation: Bool { hasScore && !isScoreStale }
+    var displayedWorkoutRecommendation: WorkoutRecommendation {
+        hasCurrentRecommendation ? workoutRecommendation : .generalActivity
+    }
 
     private let healthManager: HealthManaging
     private let scorer: EnergyScorer
     private let stressAnalyzer: StressAnalyzer
     private let recommendationEngine: RecommendationEngine
     private let watchSyncPublisher: WatchSyncPublishing
+    private let historyStore: HealthHistoryStore
+    private let widgetWriter: (WidgetMetricsSnapshot) -> Void
+    private var lastRealRecord: HealthRecord?
+    private var refreshPending = false
+    private var authorizationPending = false
+    private var refreshWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(
-        health: HealthSnapshot,
-        snapshot: EnergySnapshot,
-        sampleScenario: SampleScenario? = nil,
+        health: HealthSnapshot = .empty,
+        snapshot: EnergySnapshot = .empty,
         healthManager: HealthManaging = HealthManager(),
         scorer: EnergyScorer = EnergyScorer(),
         stressAnalyzer: StressAnalyzer = StressAnalyzer(),
         recommendationEngine: RecommendationEngine = RecommendationEngine(),
-        watchSyncPublisher: WatchSyncPublishing = WatchSyncPublisherFactory.makeDefault()
+        watchSyncPublisher: WatchSyncPublishing? = nil,
+        historyStore: HealthHistoryStore = HealthHistoryStore(),
+        widgetWriter: @escaping (WidgetMetricsSnapshot) -> Void = WidgetMetricsStore.save
     ) {
-        let initialStressReading = stressAnalyzer.evaluate(snapshot: health)
-
         self.health = health
         self.snapshot = snapshot
-        self.stressReading = initialStressReading
         self.healthManager = healthManager
         self.scorer = scorer
         self.stressAnalyzer = stressAnalyzer
         self.recommendationEngine = recommendationEngine
-        self.watchSyncPublisher = watchSyncPublisher
-        self.sampleScenario = sampleScenario
-        self.workoutRecommendation = recommendationEngine.plan(
-            for: scorer.computeScores(input: EnergyInput(snapshot: health))
-        )
-    }
-
-    var bodyStatusDescriptor: BodyStatusDescriptor {
-        BodyStatusDescriptor.make(energyScore: snapshot.energyScore)
-    }
-
-    @MainActor
-    func refreshHealthData() async {
-        guard !isLoadingHealth else { return }
-        isLoadingHealth = true
-        healthErrorMessage = nil
-
-        do {
-            try await healthManager.requestAuthorization()
-            let latest = try await healthManager.fetchLatestSnapshot(now: .now)
-            sampleScenario = nil
-            health = latest
-            recalculateScores(from: latest)
-        } catch {
-            let scenario = sampleScenario ?? .balanced
-            sampleScenario = scenario
-            health = scenario.snapshot
-            healthErrorMessage = "\(presentableHealthMessage(for: error)) 当前展示“\(scenario.title)”场景。"
-            recalculateScores(from: scenario.snapshot)
+        self.watchSyncPublisher = watchSyncPublisher ?? WatchSyncPublisherFactory.makeDefault()
+        self.historyStore = historyStore
+        self.widgetWriter = widgetWriter
+        self.stressReading = StressReading(score: 0, level: .low, hrvStressScore: 0, restingHeartRateStressScore: 0, acuteStressScore: 0)
+        self.workoutRecommendation = .empty
+        let records = historyStore.load()
+        history = records.map(\.dailyMetrics)
+        lastRealRecord = records.last
+        restoreRealData()
+        if let latest = historyStore.loadLatestHealth() {
+            self.health = latest
+            updatePressure(from: latest, now: .now)
+            if !latest.isUsable(at: .now) { healthErrorMessage = missingDataMessage(for: latest) }
         }
-
-        isLoadingHealth = false
+        self.watchSyncPublisher.onRefreshRequested = { [weak self] in
+            await self?.refreshHealthData(requestAuthorization: false)
+        }
     }
 
-    @MainActor
-    func applySampleScenario(_ scenario: SampleScenario) {
-        sampleScenario = scenario
-        health = scenario.snapshot
-        healthErrorMessage = "当前正在展示“\(scenario.title)”示例数据。\(scenario.summary)"
-        recalculateScores(from: scenario.snapshot)
+    var bodyStatusDescriptor: BodyStatusDescriptor { .make(energyScore: snapshot.energyScore) }
+    var isScoreStale: Bool {
+        healthErrorMessage != nil || (scoreValidUntil.map { $0 < Date.now } ?? true)
+    }
+    var dataStatusTitle: String {
+        if !hasScore { return "暂无评分" }
+        if isScoreStale || healthErrorMessage != nil { return "上次有效评分" }
+        return "健康数据"
     }
 
-    @MainActor
-    func recalculateScores(from health: HealthSnapshot? = nil) {
-        let source = health ?? self.health
+    func refreshIfNeeded() async {
+        if let lastRefreshAt, Date.now.timeIntervalSince(lastRefreshAt) <= 60 { return }
+        await refreshHealthData(requestAuthorization: false)
+    }
+
+    func refreshHealthData(requestAuthorization: Bool = true) async {
+        if isLoadingHealth {
+            refreshPending = true
+            authorizationPending = authorizationPending || requestAuthorization
+            await withCheckedContinuation { refreshWaiters.append($0) }
+            return
+        }
+        isLoadingHealth = true
+        defer {
+            isLoadingHealth = false
+            let waiters = refreshWaiters
+            refreshWaiters.removeAll()
+            waiters.forEach { $0.resume() }
+        }
+        var authorize = requestAuthorization
+        repeat {
+            refreshPending = false
+            await performHealthRefresh(requestAuthorization: authorize)
+            authorize = authorizationPending
+            authorizationPending = false
+        } while refreshPending
+    }
+
+    func startAutomaticUpdates(canReadHealthData: @escaping @MainActor () -> Bool = { true }) {
+        healthManager.observeChanges { [weak self] in
+            guard canReadHealthData() else { return }
+            await self?.refreshHealthData(requestAuthorization: false)
+        }
+        healthManager.enableBackgroundUpdates()
+    }
+
+    private func performHealthRefresh(requestAuthorization: Bool) async {
+        do {
+            if requestAuthorization { try await healthManager.requestAuthorization() }
+            let now = Date.now
+            let latest = try await healthManager.fetchLatestSnapshot(now: now)
+            health = latest
+            historyStore.saveLatestHealth(latest)
+            lastRefreshAt = now
+            updatePressure(from: latest, now: now)
+            do {
+                hourlyStress = try await healthManager.fetchTodayHourlyStress(now: now)
+            } catch {
+                hourlyStress = []
+            }
+            if latest.isUsable(at: now) {
+                healthErrorMessage = nil
+                recalculateScores(from: latest)
+            } else {
+                healthErrorMessage = missingDataMessage(for: latest)
+                publishCurrent()
+            }
+        } catch {
+            lastRefreshAt = .now
+            markPressureAsPrevious()
+            hourlyStress = []
+            healthErrorMessage = "暂时无法读取健康数据，可在健康 App 中检查数据与访问设置。"
+            publishCurrent()
+        }
+    }
+
+    private func missingDataMessage(for health: HealthSnapshot) -> String {
+        let missing = HealthMetric.allCases.filter { health.missingMetrics.contains($0) }.map(\.title)
+        return missing.isEmpty ? "部分测量已过期，请等待新的健康记录。" : "暂未读取到：" + missing.joined(separator: "、")
+    }
+
+    private func restoreRealData() {
+        guard let record = lastRealRecord else {
+            health = .empty
+            snapshot = .empty
+            hasScore = false
+            scoreValidUntil = nil
+            return
+        }
+        health = record.health
+        snapshot = record.energy
+        stressReading = stressAnalyzer.evaluate(snapshot: record.health)
+        workoutRecommendation = record.recommendation
+        hasScore = true
+        scoreValidUntil = record.health.validUntil
+        pressure = StressSnapshot(score: record.stressScore, levelTitle: record.stressLevelTitle,
+            updatedAt: record.health.sampleDates[.hrv] ?? record.energy.updatedAt,
+            validUntil: record.health.validUntil ?? .distantPast, basis: "HRV 与心率估算")
+    }
+
+    private func updatePressure(from source: HealthSnapshot, now: Date) {
+        guard let result = stressAnalyzer.evaluateAvailable(snapshot: source, now: now) else {
+            markPressureAsPrevious()
+            return
+        }
+        stressReading = result.reading
+        pressure = result.snapshot
+    }
+
+    private func markPressureAsPrevious() {
+        guard var previous = pressure else { return }
+        previous.validUntil = min(previous.validUntil, Date.now.addingTimeInterval(-1))
+        pressure = previous
+    }
+
+    func recalculateScores(from source: HealthSnapshot? = nil) {
+        let source = source ?? health
+        updatePressure(from: source, now: .now)
+        guard source.isUsable(at: .now) else { return }
         let scores = scorer.computeScores(input: EnergyInput(snapshot: source))
         let stress = stressAnalyzer.evaluate(snapshot: source)
-        let recommendation = recommendationEngine.plan(for: scores)
-        let energySnapshot = EnergySnapshot(
-            energyScore: scores.energyScore,
-            recoveryScore: scores.recoveryScore,
-            recommendation: recommendation.summary,
-            updatedAt: .now
-        )
-
+        let plan = recommendationEngine.plan(for: scores)
+        snapshot = EnergySnapshot(energyScore: scores.energyScore, recoveryScore: scores.recoveryScore,
+                                  recommendation: plan.summary, updatedAt: source.measuredAt ?? .now)
         stressReading = stress
-        workoutRecommendation = recommendation
-        snapshot = energySnapshot
-
-        WidgetMetricsStore.save(
-            WidgetMetricsSnapshot(
-                energyScore: energySnapshot.energyScore,
-                recoveryScore: energySnapshot.recoveryScore,
-                stressScore: stress.score,
-                stressLevelTitle: stress.level.title,
-                updatedAt: energySnapshot.updatedAt
-            )
-        )
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
-
-        watchSyncPublisher.publish(
-            snapshot: energySnapshot,
-            workoutRecommendation: recommendation,
-            metrics: WatchKeyMetricsSnapshot(
-                health: source,
-                stressScore: stress.score,
-                stressLevelTitle: stress.level.title
-            ),
-            stressScore: stress.score,
-            stressLevelTitle: stress.level.title,
-            sampleScenarioTitle: sampleScenario?.title,
-            sampleScenarioSummary: sampleScenario?.summary,
-            bodyStatus: BodyStatusDescriptor.make(energyScore: scores.energyScore)
-        )
+        workoutRecommendation = plan
+        hasScore = true
+        scoreValidUntil = source.validUntil
+        let record = HealthRecord(health: source, energy: snapshot, stressScore: stress.score,
+                                  stressLevelTitle: stress.level.title, recommendation: plan)
+        lastRealRecord = record
+        history = historyStore.save(record).map(\.dailyMetrics)
+        publishCurrent()
     }
 
-    static let preview = AppStore(
-        health: SampleScenario.balanced.snapshot,
-        snapshot: .preview,
-        sampleScenario: .balanced
-    )
-}
-
-private extension AppStore {
-    func presentableHealthMessage(for error: Error) -> String {
-        guard let healthError = error as? HealthManagerError else {
-            return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    private func publishCurrent() {
+        var payload = WatchSyncPayload(snapshot: snapshot, workoutRecommendation: hasScore ? workoutRecommendation : nil,
+            metrics: WatchKeyMetricsSnapshot(health: health, stressScore: pressure?.score ?? 0, stressLevelTitle: pressure?.levelTitle ?? "暂无评分"),
+            stressScore: pressure?.score, stressLevelTitle: pressure?.levelTitle,
+            bodyStatus: hasScore ? bodyStatusDescriptor : nil)
+        payload.hasScore = hasScore
+        payload.validUntil = scoreValidUntil
+        payload.history = history
+        payload.hourlyStress = hourlyStress
+        payload.statusMessage = healthErrorMessage
+        payload.stress = pressure
+        if let widget = payload.widgetSnapshot() {
+            widgetWriter(widget)
+            #if canImport(WidgetKit)
+            WidgetCenter.shared.reloadAllTimelines()
+            #endif
         }
-
-        switch healthError {
-        case .noData:
-            return "HealthKit 暂无最近数据，当前先展示示例结果。"
-        case .healthDataUnavailable:
-            return "当前环境无法使用 HealthKit，正在展示示例数据。"
-        case .missingType:
-            return "设备缺少部分 HealthKit 数据类型，展示结果可能不完整。"
-        }
+        watchSyncPublisher.publish(payload)
     }
+
 }

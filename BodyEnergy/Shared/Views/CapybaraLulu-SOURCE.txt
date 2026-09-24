@@ -1,0 +1,4 @@
+Source: https://github.com/srwang0506/HatchPet-CapybaraLulu
+Commit: 15447cfea25623607011be19b2c7422be1a6c43e
+Selected source frames: idle/02 (relaxed), idle/00 (calm), waiting/09 (tense), failed/09 (stressed).
+Images are copied without modification.

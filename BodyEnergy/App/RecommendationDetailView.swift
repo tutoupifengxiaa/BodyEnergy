@@ -7,11 +7,10 @@ struct RecommendationDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 headerCard
-                overviewCard
                 stepsCard
                 cautionCard
             }
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 20)
             .padding(.top, 12)
             .padding(.bottom, 24)
         }
@@ -25,42 +24,22 @@ struct RecommendationDetailView: View {
             Text(recommendation.title)
                 .font(.title3.weight(.semibold))
 
-            Text(recommendation.summary)
-                .font(.body)
-                .foregroundStyle(.secondary)
-
             HStack(spacing: 8) {
-                infoChip(title: "时长", value: recommendation.durationText, tint: .blue)
-                infoChip(title: "强度", value: recommendation.intensityText, tint: .orange)
+                infoChip(title: "时长", value: recommendation.durationText, tint: Color.accentColor)
+                infoChip(title: "强度", value: recommendation.intensityText, tint: Color.accentColor)
             }
         }
-        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
-        )
-    }
-
-    private var overviewCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("训练目的")
-                .font(.headline)
-
-            Text(recommendation.purposeText)
-                .font(.body)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+                .fill(Color(.secondarySystemGroupedBackground))
         )
     }
 
     private var stepsCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("建议做法")
+            Text("训练步骤")
                 .font(.headline)
 
             ForEach(Array(recommendation.steps.enumerated()), id: \.offset) { index, step in
@@ -79,10 +58,10 @@ struct RecommendationDetailView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
+        .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(.secondarySystemBackground))
+                .fill(Color(.secondarySystemGroupedBackground))
         )
     }
 
@@ -96,10 +75,10 @@ struct RecommendationDetailView: View {
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
+        .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.orange.opacity(0.12))
+                .fill(Color(.secondarySystemGroupedBackground))
         )
     }
 

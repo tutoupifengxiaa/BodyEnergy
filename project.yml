@@ -7,8 +7,18 @@ options:
 settings:
   base:
     SWIFT_VERSION: 5.0
-    CURRENT_PROJECT_VERSION: 1
+    CURRENT_PROJECT_VERSION: 6
     MARKETING_VERSION: 1.0.0
+
+schemes:
+  Run iOS + Watch:
+    build:
+      targets:
+        BodyEnergyLauncher: run
+    run:
+      config: Debug
+      executable: BodyEnergyLauncher
+      customWorkingDirectory: "$(PROJECT_DIR)"
 
 targets:
   BodyEnergy:
@@ -21,21 +31,29 @@ targets:
         embed: true
     sources:
       - path: BodyEnergy/App
+        excludes:
+          - Info.plist
       - path: BodyEnergy/Health
       - path: BodyEnergy/Energy
       - path: BodyEnergy/Shared/Models
+      - path: BodyEnergy/Shared/Views
       - path: BodyEnergy/Shared/ViewModels
       - path: BodyEnergy/Shared/Sync
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy
+        DEVELOPMENT_TEAM: H5979HA8JT
+        CODE_SIGN_STYLE: Automatic
         PRODUCT_NAME: BodyEnergy
         GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: BodyEnergy/App/Info.plist
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_NSHealthShareUsageDescription: Body Energy 会读取你的健康数据，用于计算身体电量与恢复分数。
         INFOPLIST_KEY_NSHealthUpdateUsageDescription: 未来版本启用相关功能后，Body Energy 可能写入与你训练相关的健康更新。
         CODE_SIGN_ENTITLEMENTS: BodyEnergy/App/BodyEnergy.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
     scheme:
       testTargets:
         - BodyEnergyTests
@@ -51,13 +69,17 @@ targets:
         excludes:
           - Info.plist
       - path: BodyEnergy/Shared/Models
+      - path: BodyEnergy/Shared/Views
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.watchkitapp
+        DEVELOPMENT_TEAM: H5979HA8JT
+        CODE_SIGN_STYLE: Automatic
         PRODUCT_NAME: BodyEnergyWatch
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: BodyEnergy/Watch/Info.plist
         CODE_SIGN_ENTITLEMENTS: BodyEnergy/Watch/BodyEnergyWatch.entitlements
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
 
   BodyEnergyWidget:
     type: app-extension
@@ -69,9 +91,12 @@ targets:
           - Info-iOS.plist
           - "*.entitlements"
       - path: BodyEnergy/Shared/Models/WidgetMetricsSnapshot.swift
+      - path: BodyEnergy/Shared/Views
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.watchkitapp.widget
+        DEVELOPMENT_TEAM: H5979HA8JT
+        CODE_SIGN_STYLE: Automatic
         PRODUCT_NAME: BodyEnergyWidget
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: BodyEnergy/Widget/Info.plist
@@ -89,9 +114,12 @@ targets:
           - Info-iOS.plist
           - "*.entitlements"
       - path: BodyEnergy/Shared/Models/WidgetMetricsSnapshot.swift
+      - path: BodyEnergy/Shared/Views
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.widget
+        DEVELOPMENT_TEAM: H5979HA8JT
+        CODE_SIGN_STYLE: Automatic
         PRODUCT_NAME: BodyEnergyIOSWidget
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: BodyEnergy/Widget/Info-iOS.plist
@@ -110,3 +138,14 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergyTests
         GENERATE_INFOPLIST_FILE: YES
+
+  BodyEnergyLauncher:
+    type: tool
+    platform: macOS
+    deploymentTarget: "15.6"
+    sources:
+      - path: Tools/BodyEnergyLauncher
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergyLauncher
+        PRODUCT_NAME: BodyEnergyLauncher

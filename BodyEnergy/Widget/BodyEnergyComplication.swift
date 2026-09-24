@@ -8,11 +8,11 @@ struct BodyEnergyWidgetEntry: TimelineEntry {
 
 struct BodyEnergyWidgetProvider: TimelineProvider {
     func placeholder(in context: Context) -> BodyEnergyWidgetEntry {
-        BodyEnergyWidgetEntry(date: .now, snapshot: .preview)
+        BodyEnergyWidgetEntry(date: .now, snapshot: .empty)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (BodyEnergyWidgetEntry) -> Void) {
-        completion(currentEntry())
+        completion(context.isPreview ? BodyEnergyWidgetEntry(date: .now, snapshot: .empty) : currentEntry())
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<BodyEnergyWidgetEntry>) -> Void) {
@@ -25,7 +25,7 @@ struct BodyEnergyWidgetProvider: TimelineProvider {
     private func currentEntry() -> BodyEnergyWidgetEntry {
         BodyEnergyWidgetEntry(
             date: .now,
-            snapshot: WidgetMetricsStore.load() ?? .preview
+            snapshot: WidgetMetricsStore.load() ?? .empty
         )
     }
 }
@@ -36,9 +36,20 @@ struct BodyEnergyComplicationEntryView: View {
     let entry: BodyEnergyWidgetProvider.Entry
 
     var body: some View {
+        Group {
+            if entry.snapshot.hasData { dataContent } else {
+                Text("暂无数据").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .widgetURL(URL(string: "bodyenergy://energy"))
+        .containerBackground(.background.tertiary, for: .widget)
+    }
+
+    @ViewBuilder
+    private var dataContent: some View {
         switch family {
         case .accessoryInline:
-            Text("电量 \(entry.snapshot.energyScore)")
+            Text("\(entry.snapshot.isStale ? "上次电量" : "电量") \(entry.snapshot.energyScore)")
         case .accessoryCircular:
             energyGauge
         case .accessoryCorner:
@@ -60,7 +71,10 @@ struct BodyEnergyComplicationEntryView: View {
         Gauge(value: Double(entry.snapshot.energyScore), in: 0...100) {
             Image(systemName: "bolt.heart")
         } currentValueLabel: {
-            Text("\(entry.snapshot.energyScore)")
+            VStack(spacing: 0) {
+                Text("\(entry.snapshot.energyScore)")
+                if entry.snapshot.isStale { Text("上次").font(.system(size: 8)) }
+            }
         }
         .gaugeStyle(.accessoryCircularCapacity)
         .tint(energyTint)
@@ -145,7 +159,7 @@ struct BodyEnergyComplicationEntryView: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(energyTint)
 
-                Text("更新于 \(entry.date, style: .time)")
+                Text("采样于 \(entry.snapshot.updatedAt, style: .time)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -186,6 +200,8 @@ struct BodyEnergyComplicationEntryView: View {
     }
 
     private var energyLevelTitle: String {
+        if entry.snapshot.isSampleData { return "示例数据" }
+        if entry.snapshot.isStale { return "上次记录" }
         switch entry.snapshot.energyScore {
         case 70...100:
             return "充足"
@@ -203,11 +219,48 @@ struct StressComplicationEntryView: View {
     let entry: BodyEnergyWidgetProvider.Entry
 
     var body: some View {
+        content
+            .widgetURL(URL(string: "bodyenergy://stress"))
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if entry.snapshot.hasStressData {
+            dataContent
+        } else {
+            emptyContent
+        }
+    }
+
+    @ViewBuilder
+    private var emptyContent: some View {
         switch family {
         case .accessoryInline:
-            Text("压力 \(entry.snapshot.stressScore)")
-        case .accessoryCircular:
-            stressGauge
+            Text("压力暂无数据")
+        case .accessoryCorner:
+            Image("CapybaraLuluCalm")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 30, height: 30)
+                .widgetLabel { Text("压力暂无数据") }
+        default:
+            HStack(spacing: 6) {
+                Image("CapybaraLuluCalm")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 34, height: 34)
+                Text("压力暂无数据")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var dataContent: some View {
+        switch family {
+        case .accessoryInline:
+            Text("\(entry.snapshot.isStressStale ? "上次压力" : "压力") \(entry.snapshot.stressScore)")
         case .accessoryCorner:
             stressCornerGauge
         case .accessoryRectangular:
@@ -223,26 +276,14 @@ struct StressComplicationEntryView: View {
         }
     }
 
-    private var stressGauge: some View {
-        Gauge(value: Double(entry.snapshot.stressScore), in: 0...100) {
-            Image(systemName: "brain.head.profile")
-        } currentValueLabel: {
-            Text("\(entry.snapshot.stressScore)")
-        }
-        .gaugeStyle(.accessoryCircularCapacity)
-        .tint(stressTint)
-    }
-
     private var stressCornerGauge: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 2) {
+            StressFace(score: entry.snapshot.stressScore)
+                .frame(width: 24, height: 24)
+
             Text("\(entry.snapshot.stressScore)")
                 .font(.system(size: 14, weight: .bold, design: .rounded))
                 .foregroundStyle(stressTint)
-
-            Text(stressMoodTitle)
-                .font(.system(size: 8, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
         }
         .widgetLabel {
             Text(stressMoodTitle)
@@ -250,37 +291,42 @@ struct StressComplicationEntryView: View {
     }
 
     private var stressRectangular: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Label("压力", systemImage: "brain.head.profile")
-                    .font(.system(size: 11, weight: .semibold))
-                    .lineLimit(1)
-
-                Spacer(minLength: 2)
-
+        HStack(spacing: 8) {
+            StressFace(score: entry.snapshot.stressScore)
+                .frame(width: 38, height: 38)
+            VStack(alignment: .leading, spacing: 3) {
+                Text("压力")
+                    .font(.system(size: 10, weight: .semibold))
                 Text("\(entry.snapshot.stressScore)")
-                    .font(.system(size: 24, weight: .bold, design: .rounded))
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
                     .foregroundStyle(stressTint)
+                Text(stressMoodTitle)
+                    .font(.system(size: 9))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
             }
-
-            Gauge(value: Double(entry.snapshot.stressScore), in: 0...100) {
-                EmptyView()
+            if entry.snapshot.hasData {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("身体电量")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                    Text("\(entry.snapshot.energyScore)")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                }
+                .padding(.leading, 18)
             }
-            .gaugeStyle(.accessoryLinearCapacity)
-            .tint(stressTint)
-
-            Text(stressMoodTitle)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(stressTint)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
         }
+        .padding(.horizontal, 4)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
 #if os(iOS)
     private var stressSystemSmall: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("压力", systemImage: "brain.head.profile")
+            HStack {
+                StressFace(score: entry.snapshot.stressScore).frame(width: 34, height: 34)
+                Text("压力")
+            }
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
 
@@ -312,7 +358,7 @@ struct StressComplicationEntryView: View {
                     .font(.title3.weight(.semibold))
                     .foregroundStyle(stressTint)
 
-                Text("更新于 \(entry.date, style: .time)")
+                Text("采样于 \(entry.snapshot.stressUpdatedAt, style: .time)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -331,7 +377,7 @@ struct StressComplicationEntryView: View {
                 .tint(stressTint)
 
                 HStack(spacing: 12) {
-                    compactMetric(title: "电量", value: "\(entry.snapshot.energyScore)")
+                    compactMetric(title: "电量", value: entry.snapshot.hasData ? "\(entry.snapshot.energyScore)" : "—")
                     compactMetric(title: "等级", value: entry.snapshot.stressLevelTitle)
                 }
             }
@@ -341,31 +387,14 @@ struct StressComplicationEntryView: View {
     }
 #endif
 
-    private var stressTint: Color {
-        switch entry.snapshot.stressScore {
-        case 0..<30:
-            return .green
-        case 30..<55:
-            return .yellow
-        case 55..<75:
-            return .orange
-        default:
-            return .red
-        }
-    }
+    private var stressTint: Color { StressMood(score: entry.snapshot.stressScore).color }
 
     private var stressMoodTitle: String {
-        switch entry.snapshot.stressScore {
-        case 0..<30:
-            return "元气满满"
-        case 30..<55:
-            return "节奏稳定"
-        case 55..<75:
-            return "稍微紧绷"
-        default:
-            return "需要缓缓"
-        }
+        if entry.snapshot.isSampleData { return "示例数据" }
+        let title = StressMood(score: entry.snapshot.stressScore).title
+        return entry.snapshot.isStressStale ? "上次 · " + title : title
     }
+
 }
 
 private func metricLabel(title: String, value: String, tint: Color) -> some View {
@@ -429,13 +458,57 @@ struct StressComplication: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: BodyEnergyWidgetProvider()) { entry in
+#if os(watchOS)
             StressComplicationEntryView(entry: entry)
+                .containerBackground(for: .widget) { Color.black }
+#else
+            StressComplicationEntryView(entry: entry)
+                .containerBackground(.background.tertiary, for: .widget)
+#endif
         }
         .configurationDisplayName("压力")
         .description("显示当前压力值与状态评语。")
-        .supportedFamilies(energySupportedFamilies)
+        .supportedFamilies(stressSupportedFamilies)
     }
 }
+
+private var stressSupportedFamilies: [WidgetFamily] {
+#if os(iOS)
+    return energySupportedFamilies
+#else
+    return [.accessoryInline, .accessoryCorner, .accessoryRectangular]
+#endif
+}
+
+#if os(watchOS)
+private struct StressCircularEntryView: View {
+    let entry: BodyEnergyWidgetProvider.Entry
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text("压力")
+                .font(.system(size: 10, weight: .medium))
+            Text(entry.snapshot.hasStressData ? "\(entry.snapshot.stressScore)" : "--")
+                .font(.system(size: 24, weight: .bold, design: .rounded))
+        }
+        .widgetURL(URL(string: "bodyenergy://stress"))
+    }
+}
+
+struct StressCircularComplication: Widget {
+    let kind = "StressCircularComplication"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: BodyEnergyWidgetProvider()) { entry in
+            StressCircularEntryView(entry: entry)
+                .containerBackground(for: .widget) { Color.black }
+        }
+        .configurationDisplayName("压力（圆形）")
+        .description("显示当前压力分数。")
+        .supportedFamilies([.accessoryCircular])
+    }
+}
+#endif
 
 #Preview(as: .accessoryRectangular) {
     BodyEnergyComplication()

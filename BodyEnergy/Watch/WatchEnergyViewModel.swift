@@ -4,15 +4,30 @@ import SwiftUI
 
 @MainActor
 final class WatchEnergyViewModel: ObservableObject {
-    @Published private(set) var snapshot: EnergySnapshot = .preview
-    @Published private(set) var workoutRecommendation: WorkoutRecommendation = .preview
-    @Published private(set) var metrics: WatchKeyMetricsSnapshot = .preview
+    @Published private(set) var snapshot: EnergySnapshot = .empty
+    @Published private(set) var workoutRecommendation: WorkoutRecommendation = .empty
+    @Published private(set) var metrics: WatchKeyMetricsSnapshot = .empty
     @Published private(set) var status: WatchEnergyStatus = .medium
     @Published private(set) var syncBadge: WatchSyncBadge = .waiting
     @Published private(set) var connectionNote: String = "等待 iPhone 同步"
-    @Published private(set) var sampleScenarioTitle: String?
-    @Published private(set) var sampleScenarioSummary: String?
-    @Published private(set) var bodyStatus: BodyStatusDescriptor = .make(energyScore: EnergySnapshot.preview.energyScore)
+    @Published private(set) var bodyStatus: BodyStatusDescriptor = .make(energyScore: EnergySnapshot.empty.energyScore)
+
+    @Published private(set) var hasScore = false
+    @Published private(set) var validUntil: Date?
+    @Published private(set) var history: [DailyMetrics] = []
+    @Published private(set) var hourlyStress: [HourlyStress] = []
+    @Published private(set) var receivedAt: Date?
+    @Published private(set) var statusMessage: String?
+    @Published private(set) var pressure: StressSnapshot?
+
+    var hasPressure: Bool { pressure != nil }
+    var isPressureStale: Bool { pressure?.isStale ?? true }
+
+    var isStale: Bool { statusMessage != nil || (validUntil.map { $0 < Date.now } ?? true) }
+    var hasCurrentRecommendation: Bool { hasScore && !isStale }
+    var displayedWorkoutRecommendation: WorkoutRecommendation {
+        hasCurrentRecommendation ? workoutRecommendation : .generalActivity
+    }
 
     private let manager: WatchConnectivityManager
     private var cancellables: Set<AnyCancellable> = []
@@ -23,6 +38,13 @@ final class WatchEnergyViewModel: ObservableObject {
 
     init(manager: WatchConnectivityManager) {
         self.manager = manager
+        manager.$hasScore.assign(to: &$hasScore)
+        manager.$validUntil.assign(to: &$validUntil)
+        manager.$history.assign(to: &$history)
+        manager.$hourlyStress.assign(to: &$hourlyStress)
+        manager.$receivedAt.assign(to: &$receivedAt)
+        manager.$statusMessage.assign(to: &$statusMessage)
+        manager.$pressure.assign(to: &$pressure)
 
         manager.$snapshot
             .sink { [weak self] snapshot in
@@ -44,19 +66,12 @@ final class WatchEnergyViewModel: ObservableObject {
         manager.$connectionNote
             .assign(to: &$connectionNote)
 
-        manager.$sampleScenarioTitle
-            .assign(to: &$sampleScenarioTitle)
-
-        manager.$sampleScenarioSummary
-            .assign(to: &$sampleScenarioSummary)
-
         manager.$bodyStatus
             .assign(to: &$bodyStatus)
     }
 
     func onAppear() {
         manager.activate()
-        manager.requestLatest()
     }
 
     func refresh() {
@@ -64,23 +79,23 @@ final class WatchEnergyViewModel: ObservableObject {
     }
 
     var shortRecommendation: String {
-        workoutRecommendation.summary.shortened(limit: 72)
+        displayedWorkoutRecommendation.summary.shortened(limit: 72)
     }
 
     var recommendationTitle: String {
-        workoutRecommendation.title
+        displayedWorkoutRecommendation.title
     }
 
     var recommendationDurationText: String {
-        workoutRecommendation.durationText
+        displayedWorkoutRecommendation.durationText
     }
 
     var recommendationIntensityText: String {
-        workoutRecommendation.intensityText
+        displayedWorkoutRecommendation.intensityText
     }
 
     var compactSteps: [String] {
-        Array(workoutRecommendation.steps.prefix(2))
+        Array(displayedWorkoutRecommendation.steps.prefix(2))
     }
 
     var updatedTimeText: String {
@@ -89,7 +104,7 @@ final class WatchEnergyViewModel: ObservableObject {
 
     var syncStatusTitle: String {
         switch syncBadge {
-        case .waiting:
+        case .waiting, .connected:
             return "等待 iPhone 数据"
         case .active:
             return "已同步到当前状态"
@@ -100,7 +115,7 @@ final class WatchEnergyViewModel: ObservableObject {
 
     var syncStatusDetail: String {
         switch syncBadge {
-        case .waiting:
+        case .waiting, .connected:
             return "打开 iPhone App 或下拉刷新后，会把最新数据推到手表。"
         case .active:
             return connectionNote
@@ -149,7 +164,7 @@ final class WatchEnergyViewModel: ObservableObject {
             ),
             WatchMetricCard(
                 id: "currentHeartRate",
-                title: "当前心率",
+                title: "最近心率",
                 value: "\(Int(metrics.heartRateBPM.rounded()))",
                 unit: "bpm",
                 note: heartRateInsight,
@@ -183,49 +198,6 @@ final class WatchEnergyViewModel: ObservableObject {
 
     var stressMoodDetail: String {
         stressMoodDetail(for: metrics.stressScore)
-    }
-
-    var dailyStressTrendPoints: [WatchStressTrendPoint] {
-        let calendar = Calendar.current
-        let baseDate = snapshot.updatedAt
-        let offsets = [-12, -8, -5, -9, -4, 3, 0]
-
-        return offsets.enumerated().map { index, offset in
-            let dayOffset = index - (offsets.count - 1)
-            let date = calendar.date(byAdding: .day, value: dayOffset, to: baseDate) ?? baseDate
-            let isToday = dayOffset == 0
-            let score = boundedStressScore(metrics.stressScore + syntheticStressAdjustment(offset))
-
-            return WatchStressTrendPoint(
-                id: "day-\(index)",
-                title: isToday ? "今天" : shortWeekdayText(for: date),
-                subtitle: "\(calendar.component(.day, from: date))",
-                detailTitle: fullDayText(for: date),
-                score: score
-            )
-        }
-    }
-
-    var weeklyStressTrendPoints: [WatchStressTrendPoint] {
-        let calendar = Calendar.current
-        let baseDate = snapshot.updatedAt
-        let offsets = [-10, -8, -6, -5, -2, 0]
-
-        return offsets.enumerated().map { index, offset in
-            let weekOffset = index - (offsets.count - 1)
-            let date = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: baseDate) ?? baseDate
-            let isCurrentWeek = weekOffset == 0
-            let weekOfYear = calendar.component(.weekOfYear, from: date)
-            let score = boundedStressScore(metrics.stressScore + syntheticStressAdjustment(offset))
-
-            return WatchStressTrendPoint(
-                id: "week-\(index)",
-                title: isCurrentWeek ? "本周" : "W\(weekOfYear)",
-                subtitle: monthDayText(for: date),
-                detailTitle: isCurrentWeek ? "本周平均压力" : "第\(weekOfYear)周平均压力",
-                score: score
-            )
-        }
     }
 
     func stressTint(for score: Int) -> Color {
@@ -342,37 +314,7 @@ final class WatchEnergyViewModel: ObservableObject {
         stressTint(for: metrics.stressScore)
     }
 
-    private func boundedStressScore(_ value: Int) -> Int {
-        min(max(value, 8), 95)
-    }
 
-    private func syntheticStressAdjustment(_ offset: Int) -> Int {
-        let sleepEffect = Int((7.0 - metrics.sleepHours) * 2.4)
-        let activityEffect = Int((metrics.activeEnergyKcal - 500) / 180)
-        let hrvEffect = Int((45 - metrics.heartRateVariabilityMS) / 8)
-        return offset + sleepEffect + activityEffect + hrvEffect
-    }
-
-    private func shortWeekdayText(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.setLocalizedDateFormatFromTemplate("EEE")
-        return formatter.string(from: date)
-    }
-
-    private func fullDayText(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.setLocalizedDateFormatFromTemplate("M月d日")
-        return formatter.string(from: date)
-    }
-
-    private func monthDayText(for date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.setLocalizedDateFormatFromTemplate("M/d")
-        return formatter.string(from: date)
-    }
 }
 
 struct WatchStressTrendPoint: Identifiable {
