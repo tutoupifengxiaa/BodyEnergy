@@ -1,11 +1,64 @@
 import Foundation
 
+struct HRVBaseline: Codable, Equatable, Sendable {
+    static let minimumLogSpread = 0.15
+    static let fallbackLogSpread = 0.25
+
+    var medianMS: Double
+    var logSpread: Double
+    var dayCount: Int
+    var hrvMetric: HRVMetric? = nil
+
+    var metric: HRVMetric { hrvMetric ?? .sdnn }
+
+    var usualRangeMS: ClosedRange<Double> {
+        let spread = max(Self.minimumLogSpread, logSpread)
+        let center = log(0.4 / 0.6)
+        let lower = medianMS * exp(spread * (center - log(0.55 / 0.45)))
+        let upper = medianMS * exp(spread * (center - log(0.3 / 0.7)))
+        return lower...upper
+    }
+}
+
+struct HRVTrend: Codable, Equatable, Sendable {
+    var recentMedianMS: Double
+    var referenceMedianMS: Double
+}
+
+struct PressureMeasurement: Codable, Equatable, Sendable {
+    var hrvMS: Double
+    var baseline: HRVBaseline
+    var sampledAt: Date
+    var heartRateBPM: Double?
+    var restingHeartRateBPM: Double?
+    var restingHeartRateBaselineBPM: Double?
+    var isSleeping: Bool
+    var trend: HRVTrend? = nil
+    var hrvMetric: HRVMetric? = nil
+    var sourceIdentifier: String? = nil
+    var effectiveDurationSeconds: Double? = nil
+    var differenceCount: Int? = nil
+
+    var metric: HRVMetric { hrvMetric ?? .sdnn }
+}
+
 struct HealthSnapshot: Codable, Equatable, Sendable {
     var heartRateBPM: Double
     var heartRateVariabilityMS: Double
     var restingHeartRateBPM: Double
     var sleepHours: Double
     var activeEnergyKcal: Double
+    var heartRateIsSedentary: Bool? = nil
+    var hrvBaselineMS: Double? = nil
+    var restingHeartRateBaselineBPM: Double? = nil
+    var hrvBaselineLogSpread: Double? = nil
+    var hrvBaselineDayCount: Int? = nil
+    var pressureMeasurement: PressureMeasurement? = nil
+    var pressureContextPrepared: Bool? = nil
+    var hrvTrend: HRVTrend? = nil
+    var pressureAlgorithmVersion: Int? = StressSnapshot.algorithmVersion
+    var sleepDetails: SleepDetails? = nil
+    var fitnessContext: FitnessContext? = nil
 
     var sampleDates: [HealthMetric: Date] = [:]
     var missingMetrics: Set<HealthMetric> = []
@@ -23,8 +76,7 @@ struct HealthSnapshot: Codable, Equatable, Sendable {
 
     func isUsable(at date: Date) -> Bool {
         guard let validUntil, validUntil >= date else { return false }
-        return sampleDates.values.allSatisfy { $0 <= date.addingTimeInterval(300) }
-            && [heartRateBPM, heartRateVariabilityMS, restingHeartRateBPM, sleepHours, activeEnergyKcal].allSatisfy { $0.isFinite && $0 >= 0 }
+        return HealthMetric.allCases.allSatisfy { isUsable($0, at: date) }
     }
 
     func isUsable(_ metric: HealthMetric, at date: Date) -> Bool {
@@ -46,7 +98,8 @@ struct HealthSnapshot: Codable, Equatable, Sendable {
         heartRateVariabilityMS: 55,
         restingHeartRateBPM: 58,
         sleepHours: 7.5,
-        activeEnergyKcal: 520
+        activeEnergyKcal: 520,
+        hrvBaselineMS: 55
     )
 }
 

@@ -59,7 +59,9 @@ struct EnergyScorer {
             heartRateVariabilityMS: bounded(input.heartRateVariabilityMS, to: config.hrvValidRange),
             restingHeartRateBPM: bounded(input.restingHeartRateBPM, to: config.restingHeartRateValidRange),
             sleepHours: bounded(input.sleepHours, to: config.sleepValidRange),
-            activeEnergyKcal: bounded(input.activeEnergyKcal, to: config.activeEnergyValidRange)
+            activeEnergyKcal: bounded(input.activeEnergyKcal, to: config.activeEnergyValidRange),
+            hrvBaselineMS: input.hrvBaselineMS,
+            restingHeartRateBaselineBPM: input.restingHeartRateBaselineBPM
         )
     }
 
@@ -69,11 +71,16 @@ struct EnergyScorer {
             / max(config.baselines.restorativeSleepFloorHours, 1)
         let targetScore = bounded(config.baselines.recoveryMarkerScoreAtTarget, to: 0.01...0.99)
         let recoveryBias = log(targetScore / (1 - targetScore))
-        let hrvScore = ratioScore(input.heartRateVariabilityMS, target: config.baselines.targetHRV,
+        let hrvTarget = input.hrvBaselineMS.flatMap { config.hrvValidRange.contains($0) ? $0 : nil }
+            ?? config.baselines.targetHRV
+        let restingTarget = input.restingHeartRateBaselineBPM.flatMap {
+            config.restingHeartRateValidRange.contains($0) ? $0 : nil
+        } ?? config.baselines.targetRestingHeartRate
+        let hrvScore = ratioScore(input.heartRateVariabilityMS, target: hrvTarget,
                                  slope: 2.0, bias: recoveryBias)
         let restingHeartRateScore = inverseRatioScore(
             input.restingHeartRateBPM,
-            target: config.baselines.targetRestingHeartRate,
+            target: restingTarget,
             slope: 2.3,
             bias: recoveryBias
         )
@@ -171,4 +178,100 @@ private func bounded(_ value: Double, to range: ClosedRange<Double>) -> Double {
 
 private func bounded(_ value: Int, to range: ClosedRange<Int>) -> Int {
     Swift.min(Swift.max(value, range.lowerBound), range.upperBound)
+}
+
+struct BatteryAssessment: Codable, Equatable, Sendable {
+    var level: Double
+    var previousLevel: Double?
+    var sleepCharge: Double
+    var restCharge: Double
+    var activityDrain: Double
+    var awakeDrain: Double
+    var stressDrain: Double
+    var resetReason: String?
+
+    var limitAdjustment: Double {
+        guard let previousLevel, resetReason == nil else { return 0 }
+        return level - previousLevel - sleepCharge - restCharge + activityDrain + awakeDrain + stressDrain
+    }
+
+    var isValid: Bool {
+        level.isFinite && (0...100).contains(level)
+            && (previousLevel.map { $0.isFinite && (0...100).contains($0) } ?? true)
+            && [sleepCharge, restCharge, activityDrain, awakeDrain, stressDrain].allSatisfy { $0.isFinite && $0 >= 0 }
+    }
+}
+
+struct BodyBatteryScorer {
+    func level(previous: HealthRecord?, health: HealthSnapshot, recoveryScore: Int,
+               initialScore: Int, pressure: StressSnapshot?, now: Date) -> Double {
+        assessment(previous: previous, health: health, recoveryScore: recoveryScore,
+                   initialScore: initialScore, pressure: pressure, now: now).level
+    }
+
+    func assessment(previous: HealthRecord?, health: HealthSnapshot, recoveryScore: Int,
+                    initialScore: Int, pressure: StressSnapshot?, now: Date) -> BatteryAssessment {
+        guard let previous, let previousLevel = previous.batteryLevel,
+              previousLevel.isFinite, (0...100).contains(previousLevel),
+              let measuredAt = health.measuredAt, measuredAt <= now.addingTimeInterval(300) else {
+            return BatteryAssessment(level: Double(initialScore), previousLevel: nil,
+                sleepCharge: 0, restCharge: 0, activityDrain: 0, awakeDrain: 0, stressDrain: 0,
+                resetReason: "从当前有效健康数据建立电量起点，尚无可比较的上一条记录。")
+        }
+
+        let elapsed = measuredAt.timeIntervalSince(previous.energy.updatedAt)
+        guard elapsed >= 0 else {
+            return BatteryAssessment(level: previousLevel, previousLevel: previousLevel,
+                sleepCharge: 0, restCharge: 0, activityDrain: 0, awakeDrain: 0, stressDrain: 0,
+                resetReason: "本次观测时间早于上一条记录，保留原电量。")
+        }
+        // A long gap has too little interval data to reconstruct a continuous reserve.
+        guard elapsed <= 48 * 3600 else {
+            return BatteryAssessment(level: Double(initialScore), previousLevel: previousLevel,
+                sleepCharge: 0, restCharge: 0, activityDrain: 0, awakeDrain: 0, stressDrain: 0,
+                resetReason: "观测间隔超过 48 小时，按当前数据重新建立电量起点。")
+        }
+
+        let oldSleepDate = previous.health.sampleDates[.sleep]
+        let newSleepDate = health.sampleDates[.sleep]
+        let newNight = oldSleepDate.flatMap { old in
+            newSleepDate.map { $0.timeIntervalSince(old) > 12 * 3600 }
+        } ?? false
+        let sleepHours = min(12, max(0, newNight ? health.sleepHours
+                                                : health.sleepHours - previous.health.sleepHours))
+
+        let oldEnergyDate = previous.health.sampleDates[.activeEnergy]
+        let newEnergyDate = health.sampleDates[.activeEnergy]
+        let sameEnergyDay = oldEnergyDate.flatMap { old in
+            newEnergyDate.map { Calendar.current.isDate(old, inSameDayAs: $0) }
+        } ?? false
+        let activeKcal = max(0, sameEnergyDay ? health.activeEnergyKcal - previous.health.activeEnergyKcal
+                                              : health.activeEnergyKcal)
+
+        let awakeHours = max(0, elapsed / 3600 - sleepHours)
+        let recovery = Double(recoveryScore.clamped(to: 0...100)) / 100
+        let sleepCharge = sleepHours * 7 * (0.35 + 0.65 * recovery)
+        let activityDrain = activeKcal / 25
+        let awakeDrain = awakeHours * 0.35
+
+        var stressDrain = 0.0
+        var restCharge = 0.0
+        if let pressure, pressure.updatedAt > previous.energy.updatedAt,
+           pressure.updatedAt <= measuredAt, measuredAt.timeIntervalSince(pressure.updatedAt) <= 2 * 3600 {
+            let observedHours = min(awakeHours, 2)
+            if pressure.score > 55 {
+                stressDrain = Double(pressure.score - 55) / 45 * observedHours * 1.5
+            } else if pressure.score < 30 && health.heartRateIsSedentary == true && activeKcal <= awakeHours * 30 {
+                restCharge = Double(30 - pressure.score) / 30 * observedHours * 1.5
+            }
+        }
+
+        var result = previousLevel + sleepCharge + restCharge - activityDrain - awakeDrain - stressDrain
+        if sleepHours > 0 {
+            result = min(result, max(previousLevel, Double(recoveryScore + 10)))
+        }
+        return BatteryAssessment(level: result.clamped(to: 0...100), previousLevel: previousLevel,
+            sleepCharge: sleepCharge, restCharge: restCharge, activityDrain: activityDrain,
+            awakeDrain: awakeDrain, stressDrain: stressDrain, resetReason: nil)
+    }
 }

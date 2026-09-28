@@ -7,15 +7,11 @@ struct WatchContentView: View {
     @State private var selectedPage = 0
     @State private var selectedHistoryDate: Date?
     @State private var selectedStressHour: Int?
+    @State private var selectedMetric: HealthInsightMetric?
+    @State private var selectedFeature: WatchFeature?
 
-    private let mint = Color(red: 0.66, green: 0.91, blue: 0.76)
-    private let cardColor = Color.white.opacity(0.075)
-    private static let collectionTimeFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter
-    }()
+    private var mint: Color { viewModel.activities.preferences.settings.theme.tint }
+    private var cardColor: Color { mint.opacity(0.10) }
 
     var body: some View {
         TabView(selection: $selectedPage) {
@@ -36,7 +32,29 @@ struct WatchContentView: View {
             }
         }
         .onOpenURL { url in if url.host == "stress" { selectedPage = 1 } }
-
+        .onReceive(viewModel.$notificationDestination) { destination in
+            guard let destination else { return }
+            if destination == "breathing" { selectedMetric = nil; selectedFeature = .breathing }
+            else { selectedFeature = nil; selectedMetric = nil; selectedPage = 1 }
+            viewModel.clearNotificationDestination()
+        }
+        .fullScreenCover(item: $selectedMetric) { metric in
+            WatchMetricDetailView(explanation: viewModel.explanation(for: metric),
+                                  sleepDetails: metric == .sleep ? viewModel.metrics.health?.sleepDetails : nil)
+                .tint(mint)
+        }
+        .fullScreenCover(item: $selectedFeature) { feature in
+            Group {
+                switch feature {
+                case .breathing: ActivitySessionView(store: viewModel.activities)
+                case .feeling: FeelingCheckInView(store: viewModel.activities)
+                case .insights: InsightsView(appStore: viewModel.appStore)
+                case .history: ActivityHistoryView(store: viewModel.activities)
+                case .settings: AppSettingsView(store: viewModel.appStore.preferences)
+                }
+            }
+            .tint(mint)
+        }
     }
 
     private var overviewPage: some View {
@@ -45,21 +63,55 @@ struct WatchContentView: View {
                 HStack {
                     pageTitle("身体电量")
                     Spacer(minLength: 4)
-                    Button(action: viewModel.refresh) {
-                        Image(systemName: "arrow.clockwise")
+                    Button { selectedFeature = .settings } label: {
+                        Image(systemName: "gearshape")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(mint)
-                            .frame(width: 32, height: 32)
-                            .background(cardColor, in: Circle())
+                            .frame(width: 28, height: 32)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("打开设置")
+                    Button(action: viewModel.refresh) {
+                        Group {
+                            if viewModel.isRefreshingHealth { ProgressView().tint(mint) }
+                            else { Image(systemName: "arrow.clockwise").font(.caption.weight(.semibold)) }
+                        }
+                        .foregroundStyle(mint)
+                        .frame(width: 32, height: 32)
+                        .background(cardColor, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isRefreshingHealth)
                     .accessibilityLabel("刷新健康数据")
+                    .accessibilityValue(viewModel.isRefreshingHealth ? "读取中" : "")
                 }
 
                 if viewModel.hasScore { scoreCard }
                 else if viewModel.hasPressure { Text("电量数据待补充").font(.caption2).foregroundStyle(.secondary) }
                 else { emptyScoreCard }
 
+                Button { selectedPage = 3 } label: {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(viewModel.hasCurrentRecommendation ? "今日建议" : "通用建议 · 健康数据待补充")
+                                .font(.caption2).foregroundStyle(.secondary)
+                            Text(viewModel.shortRecommendation)
+                                .font(.caption.weight(.medium))
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(3)
+                        }
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+                    .background(cardColor, in: RoundedRectangle(cornerRadius: 18))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("查看训练安排与完整建议")
+
+                ActivityHubView(store: viewModel.activities)
+                RecoveryHabitsView(store: viewModel.appStore.habits)
 
                 if viewModel.hasPressure { Button { selectedPage = 1 } label: {
                     HStack(spacing: 10) {
@@ -67,7 +119,7 @@ struct WatchContentView: View {
                             .frame(width: 38, height: 38)
                             .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(viewModel.isPressureStale ? "上次压力" : "压力估算").font(.caption2).foregroundStyle(.secondary)
+                            Text(viewModel.isPressureStale ? "上次压力变化" : "最近压力变化").font(.caption2).foregroundStyle(.secondary)
                             Text("\(viewModel.metrics.stressScore) · \(stressMood.title)")
                                 .font(.caption.weight(.semibold))
                         }
@@ -82,7 +134,7 @@ struct WatchContentView: View {
                 .accessibilityHint("打开卡通表情与压力详情")
                 }
 
-                syncFooter
+                syncFooter(sampledAt: viewModel.metrics.health?.measuredAt ?? viewModel.pressure?.updatedAt)
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 24)
@@ -123,7 +175,7 @@ struct WatchContentView: View {
         .frame(maxWidth: .infinity)
         .background(
             LinearGradient(
-                colors: [Color(red: 0.10, green: 0.24, blue: 0.22), Color(red: 0.06, green: 0.15, blue: 0.14)],
+                colors: [mint.opacity(0.24), mint.opacity(0.12)],
                 startPoint: .topLeading, endPoint: .bottomTrailing
             ),
             in: RoundedRectangle(cornerRadius: 24, style: .continuous)
@@ -133,7 +185,7 @@ struct WatchContentView: View {
     private var stressPage: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 12) {
-                pageTitle(viewModel.isPressureStale ? "上次压力" : "压力估算")
+                pageTitle(viewModel.isPressureStale ? "上次压力变化" : "压力状态")
 
                 VStack(spacing: 5) {
                     StressFace(score: viewModel.metrics.stressScore)
@@ -147,7 +199,7 @@ struct WatchContentView: View {
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(stressMood.color)
                     }
-                    Text("压力指数 / 100")
+                    Text("压力 / 100")
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                 }
@@ -157,15 +209,19 @@ struct WatchContentView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("压力估算 \(viewModel.metrics.stressScore) 分，\(stressMood.title)")
 
+                Button("查看压力依据") { selectedMetric = .pressure }
+                    .font(.caption2)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(mint)
+
                 HStack(spacing: 8) {
-                    statPill(title: "HRV", value: viewModel.metrics.health?.missingMetrics.contains(.hrv) == true ? "—" : "\(Int(viewModel.metrics.heartRateVariabilityMS.rounded())) ms")
+                    statPill(title: viewModel.pressureHRVTitle, value: viewModel.pressureHRVValue == "—" ? "—" : "\(viewModel.pressureHRVValue) ms")
                     statPill(title: "静息心率", value: viewModel.metrics.health?.missingMetrics.contains(.restingHeartRate) == true ? "—" : "\(Int(viewModel.metrics.restingHeartRateBPM.rounded())) bpm")
                 }
-                Text(viewModel.pressure?.basis ?? "等待 HRV")
-                    .font(.caption2).foregroundStyle(.secondary)
-                syncFooter
+                pressureActions
                 hourlyStressCard
                 stressTrendCard
+                syncFooter(sampledAt: viewModel.pressure?.updatedAt)
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 24)
@@ -175,31 +231,39 @@ struct WatchContentView: View {
     private var emptyScoreCard: some View {
         VStack(spacing: 12) {
             Text("暂无可用评分").font(.headline)
-            Text(viewModel.receivedAt == nil ? "打开 iPhone App 后刷新。" : (viewModel.statusMessage ?? "评分所需数据尚不完整。"))
+            Text(viewModel.statusMessage ?? "评分所需数据尚不完整，请等待新的健康记录。")
                 .font(.caption2).foregroundStyle(.secondary)
             Button("刷新", action: viewModel.refresh)
+                .disabled(viewModel.isRefreshingHealth)
         }
         .padding(12)
     }
 
     private var emptyPressureCard: some View {
-        VStack(spacing: 12) {
-            Text("等待 HRV 数据").font(.headline)
-            Text("需要近期 HRV 测量，不依赖睡眠记录。")
-                .font(.caption2).foregroundStyle(.secondary)
-            Button("刷新", action: viewModel.refresh)
-            syncFooter
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 12) {
+                Text(viewModel.pressureDataStatus.title).font(.headline)
+                Text(viewModel.pressureDataStatus.detail)
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("查看说明") { selectedMetric = .pressure }
+                    .font(.caption2)
+                Button("刷新", action: viewModel.refresh)
+                    .disabled(viewModel.isRefreshingHealth)
+                pressureActions
+                syncFooter(sampledAt: viewModel.pressure?.updatedAt)
+            }
+            .padding(12)
         }
-        .padding(12)
     }
 
     private var stressTrendCard: some View {
-        let days = HistoryDay.recentWeek(viewModel.history)
+        let days = HistoryDay.recentWeek(viewModel.pressureHistory)
         let point = days.first { $0.date == selectedHistoryDate } ?? days.last { $0.metrics != nil } ?? days[6]
         return VStack(alignment: .leading, spacing: 10) {
             Text("近 7 天压力").font(.caption.weight(.semibold))
-            Text(point.metrics.map { "\($0.stressScore) 分" } ?? "暂无记录").font(.headline)
-            Text(point.date, format: .dateTime.month().day()).font(.caption2).foregroundStyle(.secondary)
+            Text(point.metrics?.stressScore.map { "\($0) 分" } ?? "暂无记录").font(.headline)
+            Text(AppDateTime.day(point.date)).font(.caption2).foregroundStyle(.secondary)
             HStack(alignment: .bottom, spacing: 5) {
                 ForEach(days) { day in
                     Button { selectedHistoryDate = day.date } label: {
@@ -212,7 +276,7 @@ struct WatchContentView: View {
                             } else {
                                 Text("—").foregroundStyle(.tertiary).frame(height: 60, alignment: .bottom)
                             }
-                            Text(day.date, format: .dateTime.day()).font(.system(size: 8))
+                            Text("\(Calendar.current.component(.day, from: day.date))").font(.system(size: 8))
                         }
                         .frame(maxWidth: .infinity)
                     }
@@ -231,9 +295,7 @@ struct WatchContentView: View {
         return VStack(alignment: .leading, spacing: 8) {
             Label("今日逐小时压力", systemImage: "chart.bar.xaxis")
                 .font(.caption.weight(.semibold))
-            Text("按 HRV 估算 · 空白表示无采样")
-                .font(.system(size: 10)).foregroundStyle(.secondary)
-            Text(selected.map { hour in scores[hour].map { "\(hour):00  \($0) 分" } ?? "\(hour):00 无采样" } ?? "今天暂无 HRV 采样")
+            Text(selected.map { hour in scores[hour].map { "\(hour):00  \($0) 分" } ?? "\(hour):00 无采样" } ?? "今天暂无逐小时压力记录")
                 .font(.caption.weight(.semibold))
             ZStack(alignment: .bottom) {
                 Rectangle().fill(.white.opacity(0.1)).frame(height: 1)
@@ -283,20 +345,21 @@ struct WatchContentView: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 10) {
                 pageTitle("健康指标")
+                Button { selectedFeature = .insights } label: {
+                    Label("查看趋势与睡眠详情", systemImage: "chart.xyaxis.line")
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
                 LazyVGrid(
                     columns: Array(repeating: GridItem(.flexible(), spacing: 7), count: dynamicTypeSize.isAccessibilitySize ? 1 : 2),
                     spacing: 7
                 ) {
-                    ForEach(viewModel.metricCards.filter { $0.id != "stress" }) { card in
+                    ForEach(viewModel.metricCards) { card in
                         metricTile(card)
                     }
                 }
-                if let collectedAt = viewModel.metrics.health?.measuredAt {
-                    Text("最近采集时间：\(Self.collectionTimeFormatter.string(from: collectedAt))")
-                        .font(.system(size: 10)).foregroundStyle(.secondary)
-                        .padding(.horizontal, 4)
-                }
-                syncFooter
+                syncFooter(sampledAt: viewModel.metrics.health?.measuredAt)
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 24)
@@ -316,6 +379,10 @@ struct WatchContentView: View {
                         .font(.title3).foregroundStyle(mint)
                     Text(viewModel.recommendationTitle)
                         .font(.headline)
+                    Text(viewModel.displayedWorkoutRecommendation.summary)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(14)
@@ -325,6 +392,23 @@ struct WatchContentView: View {
                     statPill(title: "时长", value: viewModel.recommendationDurationText)
                     statPill(title: "强度", value: viewModel.recommendationIntensityText)
                 }
+
+                WatchWorkoutTimingEntry(store: viewModel.activities,
+                                        recommendation: viewModel.displayedWorkoutRecommendation)
+                Button { selectedFeature = .history } label: {
+                    Label("查看活动记录", systemImage: "clock.arrow.circlepath")
+                        .font(.caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.bordered)
+
+                Text(viewModel.displayedWorkoutRecommendation.purposeText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(12)
+                    .background(cardColor, in: RoundedRectangle(cornerRadius: 20))
 
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(Array(viewModel.displayedWorkoutRecommendation.steps.enumerated()), id: \.offset) { index, step in
@@ -345,7 +429,7 @@ struct WatchContentView: View {
 
                 Text(viewModel.displayedWorkoutRecommendation.cautionText)
                     .font(.caption2).foregroundStyle(.secondary)
-                syncFooter
+                syncFooter(sampledAt: viewModel.metrics.health?.measuredAt)
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 24)
@@ -364,27 +448,46 @@ struct WatchContentView: View {
         .padding(.leading, 4)
     }
 
-    private var syncFooter: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                Text(syncLabel)
-                Spacer(minLength: 4)
-                Text(viewModel.receivedAt.map { $0.formatted(.dateTime.hour().minute()) } ?? "—")
-            }
-            Text(viewModel.connectionNote)
+    private func syncFooter(sampledAt: Date?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("采集时间").font(.caption2.weight(.semibold))
+            if let sampledAt {
+                Text(AppDateTime.timestamp(sampledAt)).monospacedDigit()
+            } else { Text("暂无采集记录") }
+            if viewModel.isRefreshingHealth { Text("正在读取手表健康数据…") }
+            else if let note = viewModel.localRefreshNote { Text(note) }
+            Text(viewModel.phoneSyncNote ?? viewModel.connectionNote)
         }
         .font(.system(size: 10))
         .foregroundStyle(.secondary)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 4)
     }
 
     private var syncLabel: String {
         switch viewModel.syncBadge {
-        case .waiting: return "等待同步"
+        case .waiting: return "等待健康数据"
         case .connected: return "已连接·待数据"
-        case .active: return "已接收同步"
+        case .active: return "数据已更新"
         case .error: return "同步失败"
         }
+    }
+
+    private var pressureActions: some View {
+        VStack(spacing: 8) {
+            Button { selectedFeature = .breathing } label: {
+                Label("舒缓呼吸", systemImage: "wind")
+                    .font(.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Button { selectedFeature = .feeling } label: {
+                Label("记录感受", systemImage: "face.smiling")
+                    .font(.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .buttonStyle(.bordered)
     }
 
     private func statPill(title: String, value: String) -> some View {
@@ -398,27 +501,67 @@ struct WatchContentView: View {
     }
 
     private func metricTile(_ card: WatchMetricCard) -> some View {
-        let metric: HealthMetric? = ["hrv": .hrv, "resting": .restingHeartRate, "sleep": .sleep, "currentHeartRate": .heartRate, "activity": .activeEnergy][card.id]
-        let available = metric.map { !(viewModel.metrics.health?.missingMetrics.contains($0) ?? true) } ?? viewModel.hasScore
-        return VStack(alignment: .leading, spacing: 8) {
-            Image(systemName: card.symbol)
-                .font(.caption).foregroundStyle(mint)
-            Text(card.title).font(.system(size: 10)).foregroundStyle(.secondary)
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(available ? card.value : "—")
-                    .font(.system(.title3, design: .rounded, weight: .semibold))
-                    .monospacedDigit()
-                Text(card.unit).font(.system(size: 9)).foregroundStyle(.secondary)
+        let metric: HealthInsightMetric = ["hrv": .hrv, "resting": .restingHeartRate, "sleep": .sleep,
+            "currentHeartRate": .heartRate, "activity": .activeEnergy, "stress": .pressure][card.id] ?? .recovery
+        let explanation = viewModel.explanation(for: metric)
+        return Button { selectedMetric = metric } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: card.symbol)
+                        .font(.caption).foregroundStyle(mint)
+                    Spacer(minLength: 0)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8)).foregroundStyle(.secondary)
+                }
+                Text(explanation.title).font(.system(size: 10)).foregroundStyle(.secondary)
+                HStack(alignment: .firstTextBaseline, spacing: 2) {
+                    Text(explanation.value)
+                        .font(.system(.title3, design: .rounded, weight: .semibold))
+                        .monospacedDigit()
+                    Text(explanation.unit).font(.system(size: 9)).foregroundStyle(.secondary)
+                }
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                Text(explanation.statusTitle)
+                    .font(.system(size: 9)).foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-            .lineLimit(1)
-            .minimumScaleFactor(0.8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(10)
+            .background(cardColor, in: RoundedRectangle(cornerRadius: 18))
+            .contentShape(RoundedRectangle(cornerRadius: 18))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(cardColor, in: RoundedRectangle(cornerRadius: 18))
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
+        .accessibilityHint("查看指标解释与采样时间")
     }
 
+}
+
+private enum WatchFeature: String, Identifiable {
+    case breathing, feeling, insights, history, settings
+    var id: String { rawValue }
+}
+
+private struct WatchWorkoutTimingEntry: View {
+    @ObservedObject var store: ActivityStore
+    let recommendation: WorkoutRecommendation
+    @State private var capturedRecommendation: WorkoutRecommendation?
+    @State private var showingSession = false
+
+    var body: some View {
+        Button {
+            capturedRecommendation = recommendation
+            showingSession = true
+        } label: {
+            Text(store.active == nil ? "开始计时" : "继续当前计时")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .fullScreenCover(isPresented: $showingSession) {
+            ActivitySessionView(store: store, recommendation: capturedRecommendation)
+        }
+    }
 }
 
 struct WatchContentView_Previews: PreviewProvider {

@@ -15,10 +15,10 @@ enum StressMood: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .relaxed: return "放松"
-        case .calm: return "平静"
-        case .tense: return "紧绷"
-        case .stressed: return "压力较高"
+        case .relaxed: return "压力较低"
+        case .calm: return "压力适中"
+        case .tense: return "压力较高"
+        case .stressed: return "压力很高"
         }
     }
 

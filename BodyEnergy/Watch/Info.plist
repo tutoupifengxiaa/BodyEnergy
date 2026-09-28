@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>NSHealthShareUsageDescription</key>
+  <string>读取手表健康数据，用于在手机未打开时计算压力、身体电量和运动建议。</string>
+  <key>NSHealthUpdateUsageDescription</key>
+  <string>将你主动完成的运动、心率和活动能量保存到 Apple 健康。</string>
+  <key>WKBackgroundModes</key>
+  <array><string>workout-processing</string></array>
   <key>CFBundleDevelopmentRegion</key>
   <string>$(DEVELOPMENT_LANGUAGE)</string>
   <key>CFBundleDisplayName</key>

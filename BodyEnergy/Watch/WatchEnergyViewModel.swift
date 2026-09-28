@@ -17,20 +17,60 @@ final class WatchEnergyViewModel: ObservableObject {
     @Published private(set) var history: [DailyMetrics] = []
     @Published private(set) var hourlyStress: [HourlyStress] = []
     @Published private(set) var receivedAt: Date?
+    @Published private(set) var lastPhoneSyncAt: Date?
+    @Published private(set) var lastLocalRefreshAt: Date?
+    @Published private(set) var isRefreshingHealth = false
+    @Published private(set) var localRefreshNote: String?
+    @Published private(set) var phoneSyncNote: String?
     @Published private(set) var statusMessage: String?
     @Published private(set) var pressure: StressSnapshot?
+    @Published private(set) var notificationDestination: String?
 
     var hasPressure: Bool { pressure != nil }
+    var pressureHistory: [DailyMetrics] {
+        history.map { $0.matchingPressureMetric(pressure?.hrvMetric ?? metrics.health?.pressureMeasurement?.metric ?? .sdnn) }
+    }
     var isPressureStale: Bool { pressure?.isStale ?? true }
+    var pressureHRVTitle: String { displayedPressureMeasurement?.metric.title ?? HRVMetric.sdnn.title }
+    var pressureHRVValue: String {
+        guard let measurement = displayedPressureMeasurement else { return explanation(for: .hrv).value }
+        return "\(Int(measurement.hrvMS.rounded()))"
+    }
+
+    var pressureDataStatus: PressureDataStatus {
+        PressureDataStatus(health: metrics.health ?? .empty, pressure: pressure)
+    }
+
+    func explanation(for metric: HealthInsightMetric) -> HealthMetricExplanation {
+        HealthMetricExplanation(metric: metric, health: metrics.health ?? .empty, pressure: pressure,
+                                recoveryScore: hasScore ? snapshot.recoveryScore : nil,
+                                recoveryUpdatedAt: hasScore ? snapshot.updatedAt : nil,
+                                recoveryIsStale: isStale)
+    }
+
+    private var displayedPressureMeasurement: PressureMeasurement? {
+        guard let measurement = metrics.health?.pressureMeasurement else { return nil }
+        if let pressure {
+            guard measurement.metric == (pressure.hrvMetric ?? .sdnn),
+                  measurement.sampledAt == pressure.updatedAt else { return nil }
+        }
+        return measurement
+    }
 
     var isStale: Bool { statusMessage != nil || (validUntil.map { $0 < Date.now } ?? true) }
     var hasCurrentRecommendation: Bool { hasScore && !isStale }
     var displayedWorkoutRecommendation: WorkoutRecommendation {
-        hasCurrentRecommendation ? workoutRecommendation : .generalActivity
+        guard hasCurrentRecommendation else { return .generalActivity }
+        let raw = EnergyScorer().computeScores(input: EnergyInput(snapshot: metrics.health ?? .empty))
+        let scores = EnergyScores(recoveryScore: snapshot.recoveryScore, energyScore: snapshot.energyScore, trainingLoadScore: raw.trainingLoadScore)
+        return RecommendationEngine().plan(for: scores, preferences: activities.preferences.settings.training)
     }
 
     private let manager: WatchConnectivityManager
     private var cancellables: Set<AnyCancellable> = []
+
+    var activities: ActivityStore { manager.activities }
+    var appStore: AppStore { manager.appStore }
 
     convenience init() {
         self.init(manager: WatchConnectivityManager())
@@ -38,13 +78,20 @@ final class WatchEnergyViewModel: ObservableObject {
 
     init(manager: WatchConnectivityManager) {
         self.manager = manager
+        manager.activities.preferences.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &cancellables)
         manager.$hasScore.assign(to: &$hasScore)
         manager.$validUntil.assign(to: &$validUntil)
         manager.$history.assign(to: &$history)
         manager.$hourlyStress.assign(to: &$hourlyStress)
         manager.$receivedAt.assign(to: &$receivedAt)
+        manager.$lastPhoneSyncAt.assign(to: &$lastPhoneSyncAt)
+        manager.$lastLocalRefreshAt.assign(to: &$lastLocalRefreshAt)
+        manager.$isRefreshingHealth.assign(to: &$isRefreshingHealth)
+        manager.$localRefreshNote.assign(to: &$localRefreshNote)
+        manager.$phoneSyncNote.assign(to: &$phoneSyncNote)
         manager.$statusMessage.assign(to: &$statusMessage)
         manager.$pressure.assign(to: &$pressure)
+        manager.$notificationDestination.assign(to: &$notificationDestination)
 
         manager.$snapshot
             .sink { [weak self] snapshot in
@@ -78,6 +125,8 @@ final class WatchEnergyViewModel: ObservableObject {
         manager.requestLatest()
     }
 
+    func clearNotificationDestination() { manager.clearNotificationDestination() }
+
     var shortRecommendation: String {
         displayedWorkoutRecommendation.summary.shortened(limit: 72)
     }
@@ -99,7 +148,7 @@ final class WatchEnergyViewModel: ObservableObject {
     }
 
     var updatedTimeText: String {
-        snapshot.updatedAt.formatted(date: .omitted, time: .shortened)
+        AppDateTime.time(snapshot.updatedAt)
     }
 
     var syncStatusTitle: String {
@@ -137,8 +186,8 @@ final class WatchEnergyViewModel: ObservableObject {
             ),
             WatchMetricCard(
                 id: "hrv",
-                title: "HRV",
-                value: "\(Int(metrics.heartRateVariabilityMS.rounded()))",
+                title: "HRV · SDNN",
+                value: explanation(for: .hrv).value,
                 unit: "ms",
                 note: hrvInsight,
                 tint: .cyan,
@@ -216,26 +265,26 @@ final class WatchEnergyViewModel: ObservableObject {
     func stressMoodTitle(for score: Int) -> String {
         switch score {
         case 0..<30:
-            return "元气满满"
+            return "压力较低"
         case 30..<55:
-            return "节奏稳定"
+            return "压力适中"
         case 55..<75:
-            return "稍微紧绷"
+            return "压力较高"
         default:
-            return "需要缓缓"
+            return "压力很高"
         }
     }
 
     func stressMoodDetail(for score: Int) -> String {
         switch score {
         case 0..<30:
-            return "压力很低，今天适合把训练和安排往前推进。"
+            return "压力较低，保持当前节奏。"
         case 30..<55:
-            return "压力适中，继续保持当前节奏就很好。"
+            return "压力适中，适时休息。"
         case 55..<75:
-            return "压力偏高，建议把强度收一点，优先恢复。"
+            return "压力较高，放慢节奏。"
         default:
-            return "压力较高，优先补水、步行、拉伸和休息。"
+            return "压力很高，优先安排休息。"
         }
     }
 
@@ -245,9 +294,9 @@ final class WatchEnergyViewModel: ObservableObject {
             return "和当前压力基本持平。"
         }
         if delta > 0 {
-            return "比当前高\(delta)分，适合低刺激安排。"
+            return "比当前高\(delta)分。"
         }
-        return "比当前低\(abs(delta))分，恢复余量更足。"
+        return "比当前低\(abs(delta))分。"
     }
 
     private var recoveryInsight: String {
@@ -261,13 +310,8 @@ final class WatchEnergyViewModel: ObservableObject {
     }
 
     private var hrvInsight: String {
-        if metrics.heartRateVariabilityMS >= 65 {
-            return "波动良好"
-        }
-        if metrics.heartRateVariabilityMS >= 40 {
-            return "处于常见区间"
-        }
-        return "偏低，留意压力"
+        let detail = explanation(for: .hrv)
+        return detail.comparison ?? detail.statusTitle
     }
 
     private var restingHeartRateInsight: String {

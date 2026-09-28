@@ -8,6 +8,8 @@ struct WorkoutRecommendation: Codable, Equatable, Sendable {
     var purposeText: String
     var cautionText: String
     var steps: [String]
+    var activityType: TrainingActivity? = nil
+    var targetMinutes: Int? = nil
 
     static let empty = WorkoutRecommendation(
         title: "暂无建议", summary: "等待健康数据后生成运动建议。",
@@ -15,16 +17,21 @@ struct WorkoutRecommendation: Codable, Equatable, Sendable {
     )
 
     static let generalActivity = WorkoutRecommendation(
-        title: "轻松步行或拉伸", summary: "通用轻活动建议，按舒适程度安排。",
-        durationText: "量力安排", intensityText: "轻强度",
-        purposeText: "日常轻活动参考。", cautionText: "感觉不适时停止活动。",
-        steps: ["从短时间的轻松步行开始。", "按舒适程度放缓或休息。", "也可选择轻柔拉伸。"]
+        title: "轻松步行或舒展", summary: "健康数据尚不完整，可按舒适程度选择轻松步行或柔和舒展。",
+        durationText: "按舒适程度", intensityText: "轻强度",
+        purposeText: "提供不依赖身体电量分数的日常轻活动参考。",
+        cautionText: "无需完成固定时长；感觉不适时停止活动并休息。",
+        steps: [
+            "先慢走或原地踏步几分钟，留意呼吸与身体感受。",
+            "如果感觉舒适，可继续轻松步行；也可改做肩、髋和小腿的柔和活动。",
+            "结束前逐渐放慢，补水并休息；今天不想活动也可以。"
+        ]
     )
 
     static let preview = WorkoutRecommendation(
-        title: "二区有氧恢复课",
-        summary: "今天适合安排 20 到 30 分钟稳态有氧，结束后加上 8 分钟拉伸放松。",
-        durationText: "28 分钟",
+        title: "稳态有氧训练",
+        summary: "约 36 分钟稳态有氧：热身、主训练、放缓和拉伸。",
+        durationText: "36 分钟",
         intensityText: "低到中等强度",
         purposeText: "维持心肺刺激，同时不过度消耗恢复储备。",
         cautionText: "如果当前心率持续偏高或主观疲劳明显，改成快走也可以。",

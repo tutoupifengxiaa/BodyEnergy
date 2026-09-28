@@ -1,5 +1,10 @@
 import Foundation
 
+enum HealthCollectionSource: String, Codable, Equatable, Sendable {
+    case iPhone
+    case appleWatch
+}
+
 struct WatchSyncPayload: Codable, Equatable, Sendable {
     var energyScore: Int
     var recoveryScore: Int
@@ -25,13 +30,51 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
     var recommendationPurpose: String?
     var statusMessage: String?
     var stress: StressSnapshot?
+    var stressAlgorithmVersion: Int? = StressSnapshot.algorithmVersion
+    var collectionSource: HealthCollectionSource? = nil
+    var activityRecords: [ActivityRecord]? = nil
+    var userFeatures: UserFeaturesState? = nil
+    var batteryTimeline: [BatteryTimelinePoint]? = nil
+    var batteryAssessment: BatteryAssessment? = nil
+    var pressureSamples: [EnergyPressureSample]? = nil
+    var recommendationActivityType: TrainingActivity? = nil
+    var recommendationTargetMinutes: Int? = nil
+
+    var availableBatteryAssessment: BatteryAssessment? {
+        guard let batteryAssessment, batteryAssessment.isValid,
+              Int(batteryAssessment.level.rounded()) == energyScore else { return nil }
+        return batteryAssessment
+    }
 
     var availableStress: StressSnapshot? {
+        guard stressAlgorithmVersion == StressSnapshot.algorithmVersion else { return nil }
         if let stress { return stress }
         guard hasScore, let stressScore else { return nil }
         return StressSnapshot(score: stressScore, levelTitle: stressLevelTitle ?? WidgetMetricsSnapshot.stressTitle(for: stressScore),
-            updatedAt: metrics?.health?.sampleDates[.hrv] ?? updatedAt, validUntil: validUntil ?? .distantPast,
-            basis: "HRV 与心率估算")
+            updatedAt: metrics?.health?.pressureMeasurement?.sampledAt ?? metrics?.health?.sampleDates[.hrv] ?? updatedAt,
+            validUntil: validUntil ?? .distantPast,
+            basis: "HRV 估算", hrvMetric: metrics?.health?.pressureMeasurement?.metric)
+    }
+
+    var availableHistory: [DailyMetrics] {
+        guard stressAlgorithmVersion == StressSnapshot.algorithmVersion else {
+            return history.map { DailyMetrics(date: $0.date, energyScore: $0.energyScore,
+                recoveryScore: $0.recoveryScore, stressScore: nil) }
+        }
+        return history.map { $0.matchingPressureMetric(availableStress?.hrvMetric ?? metrics?.health?.pressureMeasurement?.metric ?? .sdnn) }
+    }
+
+    var availableHourlyStress: [HourlyStress] {
+        guard stressAlgorithmVersion == StressSnapshot.algorithmVersion else { return [] }
+        let metric = availableStress?.hrvMetric ?? metrics?.health?.pressureMeasurement?.metric ?? .sdnn
+        return (hourlyStress ?? []).filter { ($0.hrvMetric ?? .sdnn) == metric }
+    }
+
+    var availableMetrics: WatchKeyMetricsSnapshot? {
+        guard var metrics else { return nil }
+        metrics.stressScore = availableStress?.score ?? 0
+        metrics.stressLevelTitle = availableStress?.levelTitle ?? "暂无评分"
+        return metrics
     }
 
     func isNewer(than previous: WatchSyncPayload?) -> Bool {
@@ -52,6 +95,8 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
         self.recommendationSteps = workoutRecommendation?.steps
         self.recommendationCaution = workoutRecommendation?.cautionText
         self.recommendationPurpose = workoutRecommendation?.purposeText
+        self.recommendationActivityType = workoutRecommendation?.activityType
+        self.recommendationTargetMinutes = workoutRecommendation?.targetMinutes
         self.isSampleData = sampleScenarioTitle != nil
         self.energyScore = snapshot.energyScore
         self.recoveryScore = snapshot.recoveryScore
@@ -86,7 +131,8 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
             intensityText: recommendationIntensityText ?? fallback.intensityText,
             purposeText: recommendationPurpose ?? fallback.purposeText,
             cautionText: recommendationCaution ?? fallback.cautionText,
-            steps: recommendationSteps ?? fallback.steps
+            steps: recommendationSteps ?? fallback.steps,
+            activityType: recommendationActivityType, targetMinutes: recommendationTargetMinutes
         )
     }
 
@@ -120,19 +166,40 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
         context["activeEnergyKcal"] = metrics?.activeEnergyKcal
         context["stressScore"] = stressScore
         context["stressLevelTitle"] = stressLevelTitle
+        context["stressAlgorithmVersion"] = stressAlgorithmVersion
         context["sampleScenarioTitle"] = sampleScenarioTitle
         context["sampleScenarioSummary"] = sampleScenarioSummary
         context["bodyStatusState"] = bodyStatus?.state.rawValue
         context["bodyStatusTitle"] = bodyStatus?.title
         context["bodyStatusDetail"] = bodyStatus?.detail
         context["bodyStatusAction"] = bodyStatus?.action
-        if let data = try? JSONEncoder().encode(self) { context["payloadV2"] = data }
+        var wire = self
+        // Completed actions also travel independently, so detailed sleep and
+        // current readings fit within WatchConnectivity's message budget.
+        wire.activityRecords = activityRecords.map { Array($0.prefix(20)) }
+        func encoded() -> Data? {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = .sortedKeys
+            return try? encoder.encode(wire)
+        }
+        var data = encoded()
+        if (data?.count ?? 0) > 55 * 1024 {
+            wire.batteryTimeline = Array((batteryTimeline ?? []).suffix(8))
+            wire.pressureSamples = Array((pressureSamples ?? []).suffix(8))
+            wire.activityRecords = nil
+            data = encoded()
+        }
+        if (data?.count ?? 0) > 55 * 1024 {
+            wire.metrics?.health?.sleepDetails = nil
+            data = encoded()
+        }
+        if let data, data.count <= 55 * 1024 { context["payloadV2"] = data }
         return context
     }
 
     init?(applicationContext: [String: Any]) {
         if let data = applicationContext["payloadV2"] as? Data {
-            guard let decoded = try? JSONDecoder().decode(Self.self, from: data),
+            guard data.count <= 60 * 1024, let decoded = try? JSONDecoder().decode(Self.self, from: data),
                   !decoded.isSampleData, decoded.sampleScenarioTitle == nil,
                   (0...100).contains(decoded.energyScore), (0...100).contains(decoded.recoveryScore),
                   decoded.stressScore.map({ (0...100).contains($0) }) ?? true else { return nil }
@@ -161,6 +228,7 @@ struct WatchSyncPayload: Codable, Equatable, Sendable {
         self.recommendationIntensityText = applicationContext["recommendationIntensityText"] as? String
         self.stressScore = applicationContext["stressScore"] as? Int
         self.stressLevelTitle = applicationContext["stressLevelTitle"] as? String
+        self.stressAlgorithmVersion = applicationContext["stressAlgorithmVersion"] as? Int
         self.sampleScenarioTitle = applicationContext["sampleScenarioTitle"] as? String
         self.sampleScenarioSummary = applicationContext["sampleScenarioSummary"] as? String
 

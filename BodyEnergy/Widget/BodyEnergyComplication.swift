@@ -179,7 +179,7 @@ struct BodyEnergyComplicationEntryView: View {
 
                 HStack(spacing: 12) {
                     compactMetric(title: "恢复", value: "\(entry.snapshot.recoveryScore)")
-                    compactMetric(title: "压力", value: "\(entry.snapshot.stressScore)")
+                    compactMetric(title: "压力", value: entry.snapshot.hasStressData ? "\(entry.snapshot.stressScore)" : "—")
                 }
             }
         }

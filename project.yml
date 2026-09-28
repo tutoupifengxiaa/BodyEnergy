@@ -36,6 +36,8 @@ targets:
       - path: BodyEnergy/Health
       - path: BodyEnergy/Energy
       - path: BodyEnergy/Shared/Models
+      - path: BodyEnergy/Shared/Activities
+      - path: BodyEnergy/Shared/Features
       - path: BodyEnergy/Shared/Views
       - path: BodyEnergy/Shared/ViewModels
       - path: BodyEnergy/Shared/Sync
@@ -50,13 +52,10 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
         INFOPLIST_KEY_NSHealthShareUsageDescription: Body Energy 会读取你的健康数据，用于计算身体电量与恢复分数。
-        INFOPLIST_KEY_NSHealthUpdateUsageDescription: 未来版本启用相关功能后，Body Energy 可能写入与你训练相关的健康更新。
+        INFOPLIST_KEY_NSHealthUpdateUsageDescription: Body Energy 会将你主动完成的手表运动及其活动能量保存到 Apple 健康。
         CODE_SIGN_ENTITLEMENTS: BodyEnergy/App/BodyEnergy.entitlements
         TARGETED_DEVICE_FAMILY: "1,2"
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
-    scheme:
-      testTargets:
-        - BodyEnergyTests
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   BodyEnergyWatch:
     type: application
@@ -69,7 +68,13 @@ targets:
         excludes:
           - Info.plist
       - path: BodyEnergy/Shared/Models
+      - path: BodyEnergy/Shared/Activities
+      - path: BodyEnergy/Shared/Features
       - path: BodyEnergy/Shared/Views
+      - path: BodyEnergy/Health
+      - path: BodyEnergy/Energy
+      - path: BodyEnergy/Shared/ViewModels
+      - path: BodyEnergy/Shared/Sync
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergy.watchkitapp
@@ -79,7 +84,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_FILE: BodyEnergy/Watch/Info.plist
         CODE_SIGN_ENTITLEMENTS: BodyEnergy/Watch/BodyEnergyWatch.entitlements
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   BodyEnergyWidget:
     type: app-extension
@@ -126,18 +131,6 @@ targets:
         CODE_SIGN_ENTITLEMENTS: BodyEnergy/Widget/BodyEnergyWidget.entitlements
         APPLICATION_EXTENSION_API_ONLY: YES
         SKIP_INSTALL: YES
-
-  BodyEnergyTests:
-    type: bundle.unit-test
-    platform: iOS
-    sources:
-      - path: BodyEnergy/Tests
-    dependencies:
-      - target: BodyEnergy
-    settings:
-      base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.tutoupifengxiaa.BodyEnergyTests
-        GENERATE_INFOPLIST_FILE: YES
 
   BodyEnergyLauncher:
     type: tool

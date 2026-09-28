@@ -16,7 +16,14 @@ final class BodyEnergyWatchDelegate: NSObject, WKApplicationDelegate {
 
     func applicationDidFinishLaunching() {
         manager.activate(requestLatest: false)
+        if manager.activities.active?.kind == .workout {
+            Task { await manager.activities.workoutController.recoverActiveSession() }
+        }
         WidgetCenter.shared.reloadAllTimelines()
+    }
+
+    func handleActiveWorkoutRecovery() {
+        Task { await manager.activities.workoutController.recoverActiveSession() }
     }
 }
 
