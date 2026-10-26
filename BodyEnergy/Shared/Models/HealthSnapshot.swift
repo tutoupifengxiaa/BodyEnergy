@@ -59,6 +59,11 @@ struct HealthSnapshot: Codable, Equatable, Sendable {
     var pressureAlgorithmVersion: Int? = StressSnapshot.algorithmVersion
     var sleepDetails: SleepDetails? = nil
     var fitnessContext: FitnessContext? = nil
+    var morningRecovery: MorningRecovery? = nil
+    var trainingLoad: TrainingLoad? = nil
+    var cycleBattery: BatteryAssessment? = nil
+    var scoringVersion: Int? = nil
+    var scoredAt: Date? = nil
 
     var sampleDates: [HealthMetric: Date] = [:]
     var missingMetrics: Set<HealthMetric> = []
@@ -68,14 +73,25 @@ struct HealthSnapshot: Codable, Equatable, Sendable {
         sleepHours: 0, activeEnergyKcal: 0, missingMetrics: Set(HealthMetric.allCases)
     )
 
-    var measuredAt: Date? { sampleDates.values.max() }
+    var measuredAt: Date? { scoredAt ?? sampleDates.values.max() }
     var validUntil: Date? {
+        if scoringVersion == BodyBatteryScorer.algorithmVersion {
+            guard let morningRecovery, cycleBattery?.isValid == true,
+                  let energyDate = sampleDates[.activeEnergy], let heartDate = sampleDates[.heartRate] else { return nil }
+            return min(morningRecovery.validUntil, energyDate.addingTimeInterval(HealthMetric.activeEnergy.maxAge),
+                       heartDate.addingTimeInterval(HealthMetric.heartRate.maxAge))
+        }
         guard missingMetrics.isEmpty, sampleDates.count == HealthMetric.allCases.count else { return nil }
         return sampleDates.map { $0.value.addingTimeInterval($0.key.maxAge) }.min()
     }
 
     func isUsable(at date: Date) -> Bool {
         guard let validUntil, validUntil >= date else { return false }
+        if scoringVersion == BodyBatteryScorer.algorithmVersion {
+            return morningRecovery?.isValid(at: date) == true && cycleBattery?.isValid == true
+                && (scoredAt.map { $0 <= date.addingTimeInterval(300) } ?? false)
+                && isUsable(.heartRate, at: date) && isUsable(.activeEnergy, at: date)
+        }
         return HealthMetric.allCases.allSatisfy { isUsable($0, at: date) }
     }
 

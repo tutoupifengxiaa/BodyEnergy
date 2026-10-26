@@ -72,6 +72,9 @@ struct HealthMetricExplanation {
     private let recoveryUpdatedAt: Date?
     private let recoveryIsStale: Bool?
     private let now: Date
+    private var displayedRecovery: Int? {
+        health.scoringVersion == BodyBatteryScorer.algorithmVersion ? health.morningRecovery?.score : recoveryScore
+    }
 
     init(metric: HealthInsightMetric, health: HealthSnapshot, pressure: StressSnapshot?,
          recoveryScore: Int?, recoveryUpdatedAt: Date? = nil, recoveryIsStale: Bool? = nil,
@@ -93,7 +96,7 @@ struct HealthMetricExplanation {
         case .heartRate: return "最近心率"
         case .activeEnergy: return "活动消耗"
         case .pressure: return "身体压力估算"
-        case .recovery: return "恢复分数"
+        case .recovery: return "晨间恢复"
         }
     }
 
@@ -116,7 +119,7 @@ struct HealthMetricExplanation {
         case .heartRate: return "\(Int(health.heartRateBPM.rounded()))"
         case .activeEnergy: return "\(Int(health.activeEnergyKcal.rounded()))"
         case .pressure: return pressure.map { "\($0.score)" } ?? "—"
-        case .recovery: return recoveryScore.map { "\($0)" } ?? "—"
+        case .recovery: return displayedRecovery.map { "\($0)" } ?? "—"
         }
     }
 
@@ -124,7 +127,7 @@ struct HealthMetricExplanation {
         guard hasValue else { return nil }
         switch metric {
         case .pressure: return pressure?.updatedAt
-        case .recovery: return recoveryUpdatedAt ?? (health.isUsable(at: now) ? health.measuredAt : nil)
+        case .recovery: return health.morningRecovery?.sleepEnd ?? recoveryUpdatedAt
         default: return healthMetric.flatMap { health.sampleDates[$0] }
         }
     }
@@ -132,7 +135,9 @@ struct HealthMetricExplanation {
     var isStale: Bool {
         switch metric {
         case .pressure: return pressure.map { $0.validUntil < now } ?? true
-        case .recovery: return recoveryIsStale ?? !health.isUsable(at: now)
+        case .recovery:
+            if health.scoringVersion == BodyBatteryScorer.algorithmVersion { return health.morningRecovery?.isValid(at: now) != true }
+            return recoveryIsStale ?? !health.isUsable(at: now)
         default: return healthMetric.map { !health.isUsable($0, at: now) } ?? true
         }
     }
@@ -160,6 +165,10 @@ struct HealthMetricExplanation {
             return baselineComparison(value: measurement.hrvMS, baseline: measurement.baseline.medianMS,
                                       unit: "ms", name: measurement.metric.title)
                 + " · \(measurement.baseline.dayCount) 个可比有效日期"
+        case .recovery:
+            guard let morning = health.morningRecovery else { return nil }
+            return "主睡眠 \(String(format: "%.1f", morning.sleepHours)) 小时 · 睡眠内 SDNN \(Int(morning.hrvMS.rounded())) ms · 心率 \(Int(morning.sleepingHeartRateBPM.rounded())) bpm。"
+                + (morning.baselineNightCount >= 7 ? "基线来自 \(morning.baselineNightCount) 个有效日期。" : "个人夜间基线建立中，暂用模型参考值。")
         default: return nil
         }
     }
@@ -174,19 +183,19 @@ struct HealthMetricExplanation {
         case .pressure:
             let status = PressureDataStatus(health: health, pressure: pressure, now: now)
             return "根据 HRV 与个人基线估算身体压力，有配对的静息心率时也会纳入参考。当前依据：\(pressure?.basis ?? "等待有效采样")。它不代表主观心情。" + (pressure == nil ? "\n\n\(status.detail)" : "")
-        case .recovery: return "综合睡眠时长、SDNN 和静息心率得到的恢复估算。HRV 与静息心率优先使用个人基线；没有对应基线时使用模型参考值。"
+        case .recovery: return "最近一次完整主睡眠结束后，用该睡眠的时长、SDNN 中位数和睡眠内心率估算。白天的 HRV 和小睡不会改写晨间恢复；晚到的主睡眠数据可修正结果。主睡眠结束 90 分钟后评估，个人基线至少需要 7 个有效日期。"
         }
     }
 
     var influence: String {
         switch metric {
         case .sleep: return "睡眠参与恢复评分，也用于估算身体电量的补充；睡眠不足会降低恢复与初始电量。"
-        case .hrv: return "SDNN 与对应基线参与恢复评分。压力采用当前可用的 HRV 算法及其独立基线，近期有效压力再参与电量变化估算。"
-        case .restingHeartRate: return "相对个人常态的变化参与恢复评分；有可比数据时也会修正压力估算。"
-        case .heartRate: return "心率与活动量参与疲劳、负荷估算；没有同期静息样本时，不用最近心率修正压力。"
-        case .activeEnergy: return "累计活动量参与训练负荷评分；与上次记录相比新增的活动消耗用于估算电量下降。"
+        case .hrv: return "晨间恢复使用主睡眠内的 SDNN 汇总，白天最近读数不会改写它。压力采用当前可用的 HRV 算法及其独立基线，有效压力区间再参与电量估算。"
+        case .restingHeartRate: return "有可比数据时修正日间压力估算。晨间恢复另外使用主睡眠内的心率汇总及其夜间基线。"
+        case .heartRate: return "训练负荷按运动记录内的心率强度与持续时间累计；不使用一次最近心率替代整场训练。没有同期静息样本时，不用最近心率修正压力。"
+        case .activeEnergy: return "从主睡眠结束开始，按活动能量的实际时间区间重算电量消耗，跨午夜也不遗漏。训练负荷另由运动心率和时长计算。"
         case .pressure: return "近期有效的压力估算参与电量消耗；满足低压静坐等条件时可估算少量补充。缺测时不补造压力数据。"
-        case .recovery: return "恢复分数帮助确定睡眠补充电量的幅度，并与当前电量、训练负荷共同决定运动建议。"
+        case .recovery: return "晨间恢复建立本睡眠周期的电量起点；白天电量再根据活动、小睡、清醒时间与有效压力区间变化。运动建议同时考虑晨间恢复、电量和训练负荷。"
         }
     }
 
@@ -218,7 +227,7 @@ struct HealthMetricExplanation {
 
     private var hasValue: Bool {
         if metric == .pressure { return pressure.map { (0...100).contains($0.score) } ?? false }
-        if metric == .recovery { return recoveryScore.map { (0...100).contains($0) } ?? false }
+        if metric == .recovery { return displayedRecovery.map { (0...100).contains($0) } ?? false }
         guard let healthMetric, !health.missingMetrics.contains(healthMetric) else { return false }
         switch healthMetric {
         case .hrv: return EnergyConfig.default.hrvValidRange.contains(health.heartRateVariabilityMS)

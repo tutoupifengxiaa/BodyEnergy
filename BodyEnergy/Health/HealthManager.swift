@@ -113,6 +113,7 @@ final class HealthManager: HealthManaging {
         async let sleep = sleepReading(now: now)
         async let energy = energyReading(now: now)
         async let fitness = fitnessContext(now: now)
+        async let physiology = try? physiologyReadings(now: now)
         let readings = await [heartRate, hrv, resting, sleep, energy]
         if let error = readings.compactMap(\.error).first { throw error }
         var snapshot = HealthSnapshot.empty
@@ -150,7 +151,74 @@ final class HealthManager: HealthManaging {
             snapshot.missingMetrics.remove(.hrv)
         }
         snapshot.fitnessContext = await fitness
+        snapshot.scoringVersion = BodyBatteryScorer.algorithmVersion
+        snapshot.scoredAt = now
+        if let physiology = await physiology {
+            snapshot.morningRecovery = MorningRecoveryScorer().assess(sleep: physiology.sleep,
+                hrv: physiology.hrv, heartRates: physiology.hearts, now: now, calendar: calendar)
+            let age = snapshot.fitnessContext?.dateOfBirth.flatMap { calendar.date(from: $0) }
+                .flatMap { calendar.dateComponents([.year], from: $0, to: now).year }
+            if let workouts = physiology.workouts {
+                snapshot.trainingLoad = TrainingLoadScorer().assess(heartRates: physiology.hearts,
+                    workouts: workouts, dayStart: calendar.startOfDay(for: now), through: now, age: age)
+            }
+            if let morning = snapshot.morningRecovery,
+               let activeEnergy = physiology.energy,
+               snapshot.isUsable(.activeEnergy, at: now), snapshot.isUsable(.heartRate, at: now) {
+                snapshot.cycleBattery = BodyBatteryScorer().replay(morning: morning, sleep: physiology.sleep,
+                    activeEnergy: activeEnergy, pressures: pressureMeasurements ?? [], through: now)
+            }
+        }
         return snapshot
+    }
+
+    private struct PhysiologyReadings {
+        var sleep: [DateInterval]
+        var hrv: [TimedHealthValue]
+        var hearts: [TimedHealthValue]
+        var energy: [TimedHealthValue]?
+        var workouts: [DateInterval]?
+    }
+
+    private func physiologyReadings(now: Date) async throws -> PhysiologyReadings {
+        guard let start = calendar.date(byAdding: .day, value: -32, to: calendar.startOfDay(for: now)),
+              let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            throw HealthManagerError.missingType("sleepAnalysis")
+        }
+        let historical = HKQuery.predicateForSamples(withStart: start, end: now)
+        let recent = HKQuery.predicateForSamples(withStart: now.addingTimeInterval(-48 * 3600), end: now)
+        async let sleepSamples = categorySamples(type: sleepType,
+            predicate: historical, limit: HKObjectQueryNoLimit)
+        async let hrvSamples = quantitySamples(type: try quantityType(.heartRateVariabilitySDNN),
+            predicate: historical, limit: HKObjectQueryNoLimit)
+        async let heartSamples = quantitySamples(type: try quantityType(.heartRate),
+            predicate: historical, limit: HKObjectQueryNoLimit)
+        async let energySamples = try? quantitySamples(type: try quantityType(.activeEnergyBurned),
+            predicate: recent, limit: HKObjectQueryNoLimit)
+        async let workouts = try? workoutIntervals(predicate: recent)
+        let (sleep, hrv, hearts, energy, workoutPeriods) = try await (sleepSamples, hrvSamples, heartSamples, energySamples, workouts)
+        func recorded<Sample: HKSample>(_ samples: [Sample]) -> [Sample] {
+            var identifiers = Set<UUID>()
+            return preferredSourceSamples(samples.filter {
+                ($0.metadata?[HKMetadataKeyWasUserEntered] as? NSNumber)?.boolValue != true
+            }).filter { identifiers.insert($0.uuid).inserted && $0.endDate <= now }
+        }
+        func values(_ samples: [HKQuantitySample], unit: HKUnit) -> [TimedHealthValue] {
+            recorded(samples).compactMap { sample in
+                let value = sample.quantity.doubleValue(for: unit)
+                guard value.isFinite, value >= 0 else { return nil }
+                return TimedHealthValue(start: sample.startDate, end: sample.endDate, value: value)
+            }
+        }
+        let sleeping = recorded(sleep).filter {
+            [HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue, HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+             HKCategoryValueSleepAnalysis.asleepDeep.rawValue, HKCategoryValueSleepAnalysis.asleepREM.rawValue].contains($0.value)
+                && $0.endDate > $0.startDate
+        }.map { DateInterval(start: $0.startDate, end: $0.endDate) }
+        return PhysiologyReadings(sleep: PhysiologyIntervals.union(sleeping),
+            hrv: values(hrv, unit: .secondUnit(with: .milli)),
+            hearts: values(hearts, unit: HKUnit.count().unitDivided(by: .minute())),
+            energy: energy.map { values($0, unit: .kilocalorie()) }, workouts: workoutPeriods)
     }
 
     func fetchTodayHourlyStress(now: Date = .now) async throws -> [HourlyStress] {
@@ -180,7 +248,7 @@ final class HealthManager: HealthManaging {
         let dayStart = calendar.startOfDay(for: now)
         guard let historyStart = calendar.date(byAdding: .day, value: -60, to: dayStart) else { return [] }
         let historyPredicate = HKQuery.predicateForSamples(withStart: historyStart, end: now)
-        let recentStart = dayStart.addingTimeInterval(-6 * 3600)
+        let recentStart = now.addingTimeInterval(-36 * 3600)
         let recentPredicate = HKQuery.predicateForSamples(withStart: recentStart, end: now)
         async let hrv = quantitySamples(type: try quantityType(.heartRateVariabilitySDNN),
             predicate: historyPredicate, limit: HKObjectQueryNoLimit)

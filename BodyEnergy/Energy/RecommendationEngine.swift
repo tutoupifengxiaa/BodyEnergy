@@ -2,6 +2,7 @@ import Foundation
 
 struct RecommendationEngine {
     func plan(for scores: EnergyScores, on date: Date = .now) -> WorkoutRecommendation {
+        guard scores.trainingLoadAvailable else { return .generalActivity }
         let alternateDay = (Calendar.current.ordinality(of: .day, in: .era, for: date) ?? 0).isMultiple(of: 2)
 
         switch scores.energyScore {
@@ -28,6 +29,7 @@ struct RecommendationEngine {
     }
 
     func plan(for scores: EnergyScores, preferences: TrainingPreferences, on date: Date = .now) -> WorkoutRecommendation {
+        guard scores.trainingLoadAvailable else { return .generalActivity }
         var base = plan(for: scores, on: date)
         let recovering = scores.energyScore < 45 || scores.recoveryScore < 55 || scores.trainingLoadScore >= 70
         let restDay = base.title == "主动休息日"

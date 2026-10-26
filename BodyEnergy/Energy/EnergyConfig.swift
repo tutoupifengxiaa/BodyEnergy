@@ -8,7 +8,6 @@ struct EnergyConfig: Sendable {
         var targetRestingHeartRate: Double = 55.0
         // Product scoring calibration; these targets are not personal baselines.
         var recoveryMarkerScoreAtTarget: Double = 0.8
-        var targetTrainingHeartRate: Double = 140.0
         var targetActiveEnergyKcal: Double = 650.0
         var activityBalanceToleranceKcal: Double = 260.0
         var overloadActiveEnergyKcal: Double = 1150.0
@@ -24,9 +23,6 @@ struct EnergyConfig: Sendable {
         var fatigueHeartRate: Double = 0.42
         var fatigueSleepDebt: Double = 0.24
         var fatigueActivity: Double = 0.34
-
-        var trainingLoadHeartRate: Double = 0.45
-        var trainingLoadActiveEnergy: Double = 0.55
 
         var energyRecovery: Double = 0.64
         var energyFatigueResistance: Double = 0.24

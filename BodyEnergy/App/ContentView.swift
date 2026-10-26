@@ -314,13 +314,13 @@ struct ContentView: View {
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 5) {
-                        Text("恢复分数")
+                        Text("晨间恢复")
                         Image(systemName: "chevron.right")
                             .font(.system(size: 9, weight: .semibold))
                     }
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.65))
-                    Text(store.hasScore ? "\(recoveryScore)" : "—")
+                    Text(store.recoveryScoreForDisplay.map(String.init) ?? "—")
                         .font(.system(.title, design: .rounded, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(.white)

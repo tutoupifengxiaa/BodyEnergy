@@ -62,7 +62,8 @@ final class WatchEnergyViewModel: ObservableObject {
     var displayedWorkoutRecommendation: WorkoutRecommendation {
         guard hasCurrentRecommendation else { return .generalActivity }
         let raw = EnergyScorer().computeScores(input: EnergyInput(snapshot: metrics.health ?? .empty))
-        let scores = EnergyScores(recoveryScore: snapshot.recoveryScore, energyScore: snapshot.energyScore, trainingLoadScore: raw.trainingLoadScore)
+        let scores = EnergyScores(recoveryScore: snapshot.recoveryScore, energyScore: snapshot.energyScore,
+            trainingLoadScore: raw.trainingLoadScore, trainingLoadAvailable: raw.trainingLoadAvailable)
         return RecommendationEngine().plan(for: scores, preferences: activities.preferences.settings.training)
     }
 
@@ -177,8 +178,8 @@ final class WatchEnergyViewModel: ObservableObject {
         [
             WatchMetricCard(
                 id: "recovery",
-                title: "恢复值",
-                value: "\(snapshot.recoveryScore)",
+                title: "晨间恢复",
+                value: explanation(for: .recovery).value,
                 unit: "分",
                 note: recoveryInsight,
                 tint: .blue,
@@ -300,10 +301,12 @@ final class WatchEnergyViewModel: ObservableObject {
     }
 
     private var recoveryInsight: String {
-        if snapshot.recoveryScore >= 75 {
+        let detail = explanation(for: .recovery)
+        guard !detail.isStale, let score = Int(detail.value) else { return detail.statusTitle }
+        if score >= 75 {
             return "恢复储备较足"
         }
-        if snapshot.recoveryScore >= 50 {
+        if score >= 50 {
             return "恢复处于中段"
         }
         return "恢复优先"

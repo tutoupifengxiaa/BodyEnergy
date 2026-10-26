@@ -8,6 +8,8 @@ struct EnergyInput: Sendable {
     var activeEnergyKcal: Double
     var hrvBaselineMS: Double? = nil
     var restingHeartRateBaselineBPM: Double? = nil
+    var morningRecoveryScore: Int? = nil
+    var trainingLoadScore: Int? = nil
 
     init(
         heartRateBPM: Double,
@@ -40,5 +42,7 @@ extension EnergyInput {
             hrvBaselineMS: snapshot.hrvBaselineMS,
             restingHeartRateBaselineBPM: snapshot.restingHeartRateBaselineBPM
         )
+        morningRecoveryScore = snapshot.morningRecovery?.score
+        trainingLoadScore = snapshot.trainingLoad?.score
     }
 }

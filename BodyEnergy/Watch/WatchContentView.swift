@@ -166,7 +166,7 @@ struct WatchContentView: View {
             HStack {
                 Text(viewModel.isStale ? "上次记录" : viewModel.bodyStatus.state.title)
                 Spacer(minLength: 4)
-                Text("恢复 \(viewModel.snapshot.recoveryScore)")
+                Text("恢复 \(viewModel.explanation(for: .recovery).value)")
             }
             .font(.caption2.weight(.medium))
             .foregroundStyle(mint)

@@ -31,6 +31,10 @@ final class AppStore: ObservableObject {
     @Published private(set) var pressureSamples: [EnergyPressureSample] = []
 
     var hasPressure: Bool { pressure != nil }
+    var recoveryScoreForDisplay: Int? {
+        health.scoringVersion == BodyBatteryScorer.algorithmVersion ? health.morningRecovery?.score
+            : (hasScore ? snapshot.recoveryScore : nil)
+    }
     var isPressureStale: Bool { pressure?.isStale ?? true }
     var pressureHistory: [DailyMetrics] {
         history.map { $0.matchingPressureMetric(pressure?.hrvMetric ?? health.pressureMeasurement?.metric ?? .sdnn) }
@@ -175,7 +179,8 @@ final class AppStore: ObservableObject {
     private func refreshRecommendation() {
         guard hasCurrentRecommendation else { return }
         let raw = scorer.computeScores(input: EnergyInput(snapshot: health))
-        let scores = EnergyScores(recoveryScore: snapshot.recoveryScore, energyScore: snapshot.energyScore, trainingLoadScore: raw.trainingLoadScore)
+        let scores = EnergyScores(recoveryScore: snapshot.recoveryScore, energyScore: snapshot.energyScore,
+            trainingLoadScore: raw.trainingLoadScore, trainingLoadAvailable: raw.trainingLoadAvailable)
         workoutRecommendation = recommendationEngine.plan(for: scores, preferences: preferences.settings.training)
         snapshot.recommendation = workoutRecommendation.summary
     }
@@ -390,6 +395,9 @@ final class AppStore: ObservableObject {
     }
 
     private func missingDataMessage(for health: HealthSnapshot) -> String {
+        if health.scoringVersion == BodyBatteryScorer.algorithmVersion && health.morningRecovery == nil {
+            return "等待完整主睡眠及睡眠内有效 HRV、心率；主睡眠结束 90 分钟后评估。"
+        }
         let missing = HealthMetric.allCases.filter { health.missingMetrics.contains($0) }.map(\.title)
         return missing.isEmpty ? "部分测量已过期，请等待新的健康记录。" : "暂未读取到：" + missing.joined(separator: "、")
     }
@@ -456,7 +464,8 @@ final class AppStore: ObservableObject {
         let batteryLevel = assessment.level
         batteryAssessment = assessment
         let currentScores = EnergyScores(recoveryScore: scores.recoveryScore,
-            energyScore: Int(batteryLevel.rounded()), trainingLoadScore: scores.trainingLoadScore)
+            energyScore: Int(batteryLevel.rounded()), trainingLoadScore: scores.trainingLoadScore,
+            trainingLoadAvailable: scores.trainingLoadAvailable)
         if let previous = lastRealRecord, previous.batteryLevel != nil, previous.health != source {
             batteryChange = currentScores.energyScore - previous.energy.energyScore
         } else {

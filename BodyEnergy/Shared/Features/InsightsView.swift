@@ -172,12 +172,16 @@ struct InsightsView: View {
 
     private var assessmentSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(appStore.isScoreStale ? "上次电量变化明细" : "本次电量变化明细")
+            Text(appStore.isScoreStale ? "上次电量变化明细" : "本睡眠周期电量明细")
                 .font(.headline)
             if let assessment = appStore.batteryAssessment, assessment.isValid {
                 if let reason = assessment.resetReason {
                     Text(reason).font(.caption).foregroundStyle(.secondary)
                 } else {
+                    if let anchor = assessment.anchorDate, let initial = assessment.previousLevel {
+                        Text("晨间起点 \(Int(initial.rounded())) 分 · \(AppDateTime.timestamp(anchor))")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     componentRow("睡眠补能", value: assessment.sleepCharge)
                     componentRow("低压静坐补能", value: assessment.restCharge)
                     componentRow("活动消耗", value: -assessment.activityDrain)
@@ -191,11 +195,18 @@ struct InsightsView: View {
                         componentRow("最终变化", value: assessment.level - previous)
                     }
                 }
-                Text("单位为电量分；明细来自两次观测间的模型估算。电量上下限与睡眠恢复上限会影响最终结果。")
+                Text(assessment.anchorDate == nil ? "单位为电量分；这是旧算法留下的历史明细。" : "单位为电量分；从晨间起点按实际区间重算，重复同步不重复记账。缺测压力不外推为整段压力。")
                     .font(.caption2).foregroundStyle(.secondary)
             } else {
                 Text("尚无可解释的变化明细，等待下一次有效电量观测。")
                     .font(.caption).foregroundStyle(.secondary)
+            }
+            if let load = appStore.health.trainingLoad {
+                Divider()
+                Text(load.score.map { "今日心血管训练负荷 \($0) / 100" } ?? "今日训练心率覆盖不足，暂不评分")
+                    .font(.subheadline)
+                Text(load.workoutSeconds == 0 ? "今日暂无已记录的运动。" : "已记录运动 \(Int((load.workoutSeconds / 60).rounded())) 分钟 · 心率覆盖 \(Int((load.coverage * 100).rounded()))%。仅累计有效心率区间，不含肌肉负荷。")
+                    .font(.caption2).foregroundStyle(.secondary)
             }
         }
         .insightsCard()
@@ -437,7 +448,7 @@ struct InsightsView: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("这些数值表示什么").font(.headline)
             Text("电量：0–100 的估算储备，随着睡眠、活动、清醒时长与有效压力观测变化。")
-            Text("恢复：综合睡眠时长、SDNN 和静息心率；有个人基线时优先使用。")
+            Text("恢复：主睡眠结束后的独立评分，使用睡眠内 SDNN 和心率；白天新采样不会改写晨间状态。")
             Text("压力：相对个人常态的身体压力估算。SDNN 与 RMSSD 分别使用自己的基线，也与主观感受有所不同。")
             Text("图表显示实际留下的记录，未记录时段与日期留空。有效天数反映统计的数据覆盖度。")
         }

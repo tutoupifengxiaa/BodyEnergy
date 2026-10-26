@@ -48,3 +48,50 @@ struct FitnessContext: Codable, Equatable, Sendable {
     var biologicalSex: FitnessBiologicalSex?
     var sourceTitle: String?
 }
+
+// Transient observations stay on the collecting device. Only the small summaries
+// below are persisted and sent through WatchConnectivity.
+struct TimedHealthValue: Hashable, Sendable {
+    var start: Date
+    var end: Date
+    var value: Double
+}
+
+struct MainSleep: Equatable, Sendable {
+    var intervals: [DateInterval]
+    var start: Date { intervals[0].start }
+    var end: Date { intervals[intervals.count - 1].end }
+    var hours: Double { intervals.reduce(0) { $0 + $1.duration } / 3600 }
+}
+
+struct MorningRecovery: Codable, Equatable, Sendable {
+    var sleepStart: Date
+    var sleepEnd: Date
+    var sleepHours: Double
+    var hrvMS: Double
+    var sleepingHeartRateBPM: Double
+    var hrvBaselineMS: Double?
+    var heartRateBaselineBPM: Double?
+    var baselineNightCount: Int
+    var score: Int
+
+    var validUntil: Date { sleepEnd.addingTimeInterval(36 * 3600) }
+    func isValid(at date: Date) -> Bool {
+        sleepStart < sleepEnd && sleepEnd <= date && validUntil >= date
+            && (0...100).contains(score) && sleepHours.isFinite && (3...16).contains(sleepHours)
+            && EnergyConfig.default.hrvValidRange.contains(hrvMS)
+            && EnergyConfig.default.restingHeartRateValidRange.contains(sleepingHeartRateBPM)
+    }
+}
+
+struct TrainingLoad: Codable, Equatable, Sendable {
+    var dayStart: Date
+    var measuredThrough: Date
+    var workoutSeconds: Double
+    var observedSeconds: Double
+    var weightedMinutes: Double
+    var score: Int?
+    var referenceMaxHeartRate: Double
+
+    var coverage: Double { workoutSeconds > 0 ? (observedSeconds / workoutSeconds).clamped(to: 0...1) : 1 }
+}
