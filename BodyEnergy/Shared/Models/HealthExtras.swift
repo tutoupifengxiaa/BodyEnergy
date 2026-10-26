@@ -64,6 +64,19 @@ struct MainSleep: Equatable, Sendable {
     var hours: Double { intervals.reduce(0) { $0 + $1.duration } / 3600 }
 }
 
+struct SleepHistorySummary: Codable, Equatable, Sendable {
+    var windowStart: Date
+    var asOf: Date
+    var targetSleepHours: Double
+    var windowDays: Int
+    var recordedDays: Int
+    var debtHours: Double?
+    var carriedDebtHours: Double?
+    var regularityScore: Int?
+    var timingShiftMinutes: Double?
+    var recoveryPenalty: Double
+}
+
 struct MorningRecovery: Codable, Equatable, Sendable {
     var sleepStart: Date
     var sleepEnd: Date
@@ -74,6 +87,7 @@ struct MorningRecovery: Codable, Equatable, Sendable {
     var heartRateBaselineBPM: Double?
     var baselineNightCount: Int
     var score: Int
+    var sleepHistory: SleepHistorySummary? = nil
 
     var validUntil: Date { sleepEnd.addingTimeInterval(36 * 3600) }
     func isValid(at date: Date) -> Bool {

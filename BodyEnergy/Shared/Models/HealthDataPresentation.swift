@@ -152,6 +152,11 @@ struct HealthMetricExplanation {
 
     var comparison: String? {
         switch metric {
+        case .sleep:
+            guard let history = health.sleepHistory else { return nil }
+            let debt = history.debtHours.map { "睡眠债约 \(String(format: "%.1f", $0)) 小时" } ?? "睡眠债记录积累中"
+            let regularity = history.regularityScore.map { "作息规律 \($0)/100" } ?? "作息规律记录积累中"
+            return "近 \(history.windowDays) 天已记录 \(history.recordedDays) 天 · \(debt) · \(regularity)。截至 \(AppDateTime.timestamp(history.asOf))。"
         case .hrv:
             guard hasValue, let baseline = health.hrvBaselineMS,
                   EnergyConfig.default.hrvValidRange.contains(baseline) else { return nil }
@@ -169,13 +174,14 @@ struct HealthMetricExplanation {
             guard let morning = health.morningRecovery else { return nil }
             return "主睡眠 \(String(format: "%.1f", morning.sleepHours)) 小时 · 睡眠内 SDNN \(Int(morning.hrvMS.rounded())) ms · 心率 \(Int(morning.sleepingHeartRateBPM.rounded())) bpm。"
                 + (morning.baselineNightCount >= 7 ? "基线来自 \(morning.baselineNightCount) 个有效日期。" : "个人夜间基线建立中，暂用模型参考值。")
+                + (morning.sleepHistory.map { "睡眠历史修正 −\(String(format: "%.1f", $0.recoveryPenalty)) 分。" } ?? "")
         default: return nil
         }
     }
 
     var explanation: String {
         switch metric {
-        case .sleep: return "最近一晚与随后小睡的有效睡眠时长，重叠记录合并计算。当前展示总时长，尚不包含睡眠阶段或睡眠质量评分。"
+        case .sleep: return "最近一次主睡眠与随后小睡的有效时长，重叠记录合并计算。睡眠债和作息规律按主睡眠结束时的近 7 天记录估算，缺测日不当作零睡眠。"
         case .hrv: return "SDNN 描述心跳间期的波动。这里展示 Apple 健康中的原始 SDNN；压力估算可能使用 RMSSD，两种数值应分别与各自的个人基线比较。"
         case .restingHeartRate: return "Apple 健康记录的静息心率。与自己的近期常态一起观察，比只看单个数字更容易理解变化。"
         case .heartRate: return "最近一次心率采样，并非持续实时心率。活动场景的心率不会直接被当成静息压力；压力估算仅采用与 HRV 配对的静息样本。"
@@ -183,13 +189,13 @@ struct HealthMetricExplanation {
         case .pressure:
             let status = PressureDataStatus(health: health, pressure: pressure, now: now)
             return "根据 HRV 与个人基线估算身体压力，有配对的静息心率时也会纳入参考。当前依据：\(pressure?.basis ?? "等待有效采样")。它不代表主观心情。" + (pressure == nil ? "\n\n\(status.detail)" : "")
-        case .recovery: return "最近一次完整主睡眠结束后，用该睡眠的时长、SDNN 中位数和睡眠内心率估算。白天的 HRV 和小睡不会改写晨间恢复；晚到的主睡眠数据可修正结果。主睡眠结束 90 分钟后评估，个人基线至少需要 7 个有效日期。"
+        case .recovery: return "最近一次完整主睡眠结束后，用该睡眠的时长、SDNN 中位数和睡眠内心率估算，并参考近 7 天已记录的睡眠债与作息波动。白天的 HRV 和小睡不会改写本次晨间恢复；晚到的睡眠历史可修正结果。主睡眠结束 90 分钟后评估，个人夜间基线至少需要 7 个有效日期。"
         }
     }
 
     var influence: String {
         switch metric {
-        case .sleep: return "睡眠参与恢复评分，也用于估算身体电量的补充；睡眠不足会降低恢复与初始电量。"
+        case .sleep: return "睡眠参与恢复评分和电量补充。累积睡眠不足与作息波动可适度降低晨间恢复；补觉按有限比例抵扣已有睡眠债。缺测日不额外扣分，稳定的白天睡眠同样视为规律。"
         case .hrv: return "晨间恢复使用主睡眠内的 SDNN 汇总，白天最近读数不会改写它。压力采用当前可用的 HRV 算法及其独立基线，有效压力区间再参与电量估算。"
         case .restingHeartRate: return "有可比数据时修正日间压力估算。晨间恢复另外使用主睡眠内的心率汇总及其夜间基线。"
         case .heartRate: return "训练负荷按运动记录内的心率强度与持续时间累计；不使用一次最近心率替代整场训练。没有同期静息样本时，不用最近心率修正压力。"

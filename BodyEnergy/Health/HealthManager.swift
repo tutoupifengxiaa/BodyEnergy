@@ -156,6 +156,8 @@ final class HealthManager: HealthManaging {
         if let physiology = await physiology {
             snapshot.morningRecovery = MorningRecoveryScorer().assess(sleep: physiology.sleep,
                 hrv: physiology.hrv, heartRates: physiology.hearts, now: now, calendar: calendar)
+            snapshot.sleepHistory = snapshot.morningRecovery?.sleepHistory
+                ?? SleepHistoryScorer().assess(sleep: physiology.sleep, now: now, calendar: calendar)
             let age = snapshot.fitnessContext?.dateOfBirth.flatMap { calendar.date(from: $0) }
                 .flatMap { calendar.dateComponents([.year], from: $0, to: now).year }
             if let workouts = physiology.workouts {
@@ -378,7 +380,8 @@ final class HealthManager: HealthManaging {
                                             isSleeping: sleeping, calendar: calendar, metric: metric),
                 hrvMetric: metric, sourceIdentifier: source,
                 effectiveDurationSeconds: observation.rmssd?.effectiveDurationSeconds,
-                differenceCount: observation.rmssd?.differenceCount)
+                differenceCount: observation.rmssd?.differenceCount,
+                rmssdQuality: observation.rmssd?.quality)
         }
     }
 

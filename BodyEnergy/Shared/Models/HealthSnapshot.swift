@@ -25,6 +25,13 @@ struct HRVTrend: Codable, Equatable, Sendable {
     var referenceMedianMS: Double
 }
 
+struct RMSSDQuality: Codable, Equatable, Sendable {
+    var version: Int
+    var intervalCount: Int
+    var rejectedIntervalCount: Int
+    var usableDurationSeconds: Double
+}
+
 struct PressureMeasurement: Codable, Equatable, Sendable {
     var hrvMS: Double
     var baseline: HRVBaseline
@@ -38,6 +45,7 @@ struct PressureMeasurement: Codable, Equatable, Sendable {
     var sourceIdentifier: String? = nil
     var effectiveDurationSeconds: Double? = nil
     var differenceCount: Int? = nil
+    var rmssdQuality: RMSSDQuality? = nil
 
     var metric: HRVMetric { hrvMetric ?? .sdnn }
 }
@@ -60,6 +68,7 @@ struct HealthSnapshot: Codable, Equatable, Sendable {
     var sleepDetails: SleepDetails? = nil
     var fitnessContext: FitnessContext? = nil
     var morningRecovery: MorningRecovery? = nil
+    var sleepHistory: SleepHistorySummary? = nil
     var trainingLoad: TrainingLoad? = nil
     var cycleBattery: BatteryAssessment? = nil
     var scoringVersion: Int? = nil
@@ -75,6 +84,7 @@ struct HealthSnapshot: Codable, Equatable, Sendable {
 
     var measuredAt: Date? { scoredAt ?? sampleDates.values.max() }
     var validUntil: Date? {
+        if let scoringVersion, scoringVersion != BodyBatteryScorer.algorithmVersion { return nil }
         if scoringVersion == BodyBatteryScorer.algorithmVersion {
             guard let morningRecovery, cycleBattery?.isValid == true,
                   let energyDate = sampleDates[.activeEnergy], let heartDate = sampleDates[.heartRate] else { return nil }

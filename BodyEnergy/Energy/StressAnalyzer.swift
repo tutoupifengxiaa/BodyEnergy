@@ -10,6 +10,7 @@ struct RMSSDResult: Equatable, Sendable {
     var effectiveDurationSeconds: TimeInterval
     var differenceCount: Int
     var endOffsetSeconds: TimeInterval
+    var quality: RMSSDQuality
 }
 
 enum RMSSDParser {
@@ -20,6 +21,12 @@ enum RMSSDParser {
     static let minimumDifferenceCount = 20
     static let minimumCoverage = 0.8
     static let rrRange: ClosedRange<TimeInterval> = 0.3...2
+    static let qualityVersion = 1
+    static let maximumRejectedFraction = 0.1
+    static let localRadius = 5
+    static let minimumRelativeDeviation = 0.2
+    static let maximumRelativeDeviation = 0.4
+    static let deviationMultiplier = 5.0
 
     static func calculate(_ beats: [HeartbeatTimestamp], seriesDuration: TimeInterval) -> RMSSDResult? {
         guard seriesDuration.isFinite, seriesDuration >= minimumDuration else { return nil }
@@ -51,12 +58,47 @@ enum RMSSDParser {
         guard let beginning = window.first, let end = window.last,
               end - beginning >= minimumDuration else { return nil }
         let rr = zip(window.dropFirst(), window).map { $0 - $1 }
-        let differences = zip(rr.dropFirst(), rr).map { $0 - $1 }
-        guard differences.count >= minimumDifferenceCount else { return nil }
+        // Robust local RR comparisons catch short/long artifacts that still fit
+        // physiological bounds. This is a conservative product quality filter.
+        let valid = rr.indices.map { index -> Bool in
+            let neighbors = (max(0, index - localRadius)...min(rr.count - 1, index + localRadius))
+                .filter { $0 != index }.map { rr[$0] }
+            guard let center = PhysiologyIntervals.median(neighbors),
+                  let mad = PhysiologyIntervals.median(neighbors.map { abs($0 - center) }) else { return false }
+            let threshold = max(minimumRelativeDeviation * center,
+                                min(maximumRelativeDeviation * center, deviationMultiplier * 1.4826 * mad))
+            return abs(rr[index] - center) <= threshold
+        }
+        let differences = rr.indices.dropFirst().compactMap { index -> Double? in
+            // Never join intervals across a rejected beat or synthesize a heartbeat.
+            guard valid[index - 1], valid[index] else { return nil }
+            return rr[index] - rr[index - 1]
+        }
+        let quality = RMSSDQuality(version: qualityVersion, intervalCount: rr.count,
+            rejectedIntervalCount: valid.filter { !$0 }.count,
+            usableDurationSeconds: rr.indices.filter { valid[$0] }.reduce(0) { $0 + rr[$1] })
+        guard isUsable(quality: quality, duration: end - beginning, differenceCount: differences.count) else { return nil }
         let value = sqrt(differences.reduce(0) { $0 + $1 * $1 } / Double(differences.count)) * 1000
         guard value.isFinite, value > 0 else { return nil }
         return RMSSDResult(milliseconds: value, effectiveDurationSeconds: end - beginning,
-                           differenceCount: differences.count, endOffsetSeconds: end)
+                           differenceCount: differences.count, endOffsetSeconds: end, quality: quality)
+    }
+
+    static func isUsable(quality: RMSSDQuality, duration: TimeInterval, differenceCount: Int) -> Bool {
+        guard quality.version == qualityVersion, duration.isFinite,
+              (minimumDuration...maximumDuration).contains(duration),
+              quality.intervalCount > minimumDifferenceCount,
+              quality.intervalCount <= Int(maximumDuration / rrRange.lowerBound),
+              (0...quality.intervalCount).contains(quality.rejectedIntervalCount),
+              differenceCount >= minimumDifferenceCount,
+              differenceCount <= quality.intervalCount - quality.rejectedIntervalCount - 1,
+              Double(quality.rejectedIntervalCount) / Double(quality.intervalCount) <= maximumRejectedFraction,
+              Double(differenceCount) / Double(quality.intervalCount - 1) >= minimumCoverage,
+              quality.usableDurationSeconds.isFinite,
+              quality.usableDurationSeconds >= minimumDuration,
+              quality.usableDurationSeconds <= duration + 0.000001,
+              quality.usableDurationSeconds / duration >= minimumCoverage else { return false }
+        return true
     }
 }
 
@@ -178,9 +220,9 @@ struct StressAnalyzer {
               validHRV(measurement.baseline.medianMS, metric: measurement.metric),
               measurement.baseline.logSpread.isFinite, measurement.baseline.logSpread > 0 else { return false }
         if measurement.metric == .rmssd {
-            guard let duration = measurement.effectiveDurationSeconds, duration.isFinite,
-                  (RMSSDParser.minimumDuration...RMSSDParser.maximumDuration).contains(duration),
-                  let count = measurement.differenceCount, count >= RMSSDParser.minimumDifferenceCount else { return false }
+            guard let duration = measurement.effectiveDurationSeconds,
+                  let count = measurement.differenceCount, let quality = measurement.rmssdQuality,
+                  RMSSDParser.isUsable(quality: quality, duration: duration, differenceCount: count) else { return false }
         }
         return true
     }

@@ -17,7 +17,7 @@ enum HRVMetric: String, Codable, Equatable, Sendable {
 }
 
 struct StressSnapshot: Codable, Equatable, Sendable {
-    static let algorithmVersion = 4
+    static let algorithmVersion = 5
 
     var score: Int
     var levelTitle: String

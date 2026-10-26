@@ -201,7 +201,7 @@ struct BatteryAssessment: Codable, Equatable, Sendable {
 }
 
 struct BodyBatteryScorer {
-    static let algorithmVersion = 2
+    static let algorithmVersion = 3
     // A spot observation supports only this short interval, never hours before it.
     static let pressureSupportSeconds: TimeInterval = 15 * 60
 
@@ -321,17 +321,21 @@ enum PhysiologyIntervals {
         return sorted.count.isMultiple(of: 2) ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle]
     }
 
-    static func mainSleeps(_ intervals: [DateInterval], through now: Date) -> [MainSleep] {
+    static func sleepEpisodes(_ intervals: [DateInterval]) -> [MainSleep] {
         var episodes: [MainSleep] = []
         for interval in union(intervals) {
             if let last = episodes.last, interval.start.timeIntervalSince(last.end) <= 90 * 60 {
                 episodes[episodes.count - 1].intervals.append(interval)
             } else { episodes.append(MainSleep(intervals: [interval])) }
         }
+        return episodes
+    }
+
+    static func mainSleeps(_ intervals: [DateInterval], through now: Date) -> [MainSleep] {
         // Allow daytime main sleep. Wait for the episode's 90-minute merge window
         // to close, so a brief awakening cannot prematurely create a new morning.
         var mains: [MainSleep] = []
-        for episode in episodes where (3...16).contains(episode.hours) && episode.end.addingTimeInterval(90 * 60) <= now {
+        for episode in sleepEpisodes(intervals) where (3...16).contains(episode.hours) && episode.end.addingTimeInterval(90 * 60) <= now {
             if let previous = mains.last, episode.start.timeIntervalSince(previous.end) < 12 * 3600,
                episode.hours < 6 { continue }
             mains.append(episode)
@@ -340,7 +344,76 @@ enum PhysiologyIntervals {
     }
 }
 
+struct SleepHistoryScorer {
+    var config: EnergyConfig = .default
+
+    func assess(sleep: [DateInterval], now: Date, calendar: Calendar = .current) -> SleepHistorySummary? {
+        let mains = PhysiologyIntervals.mainSleeps(sleep, through: now)
+        guard let latest = mains.last, latest.end.addingTimeInterval(36 * 3600) >= now else { return nil }
+        let settings = config.sleepHistory
+        let windowDays = max(1, settings.windowDays)
+        let lastDay = calendar.startOfDay(for: latest.end)
+        guard let firstDay = calendar.date(byAdding: .day, value: 1 - windowDays, to: lastDay) else { return nil }
+        // A day without a completed main sleep is unknown, never zero hours.
+        // Attribute whole episodes to their wake date, including prior days' naps.
+        let dailyMains = Dictionary(grouping: mains.filter {
+            $0.end >= firstDay && $0.end <= latest.end
+        }, by: { calendar.startOfDay(for: $0.end) })
+        let totals = Dictionary(grouping: PhysiologyIntervals.sleepEpisodes(sleep).filter {
+            $0.end >= firstDay && $0.end <= latest.end && $0.hours <= config.sleepValidRange.upperBound
+        }, by: { calendar.startOfDay(for: $0.end) }).mapValues { $0.reduce(0) { $0 + $1.hours } }
+        let days = dailyMains.keys.sorted()
+        let target = config.baselines.targetSleepHours
+        let debtLimit = max(1, settings.maximumDebtHours)
+        var debt = 0.0
+        var carriedDebt = 0.0
+        for day in days {
+            let hours = totals[day] ?? 0
+            let repayment = min(max(0, hours - target) * settings.surplusRepaymentFraction.clamped(to: 0...1),
+                                max(0, settings.maximumDailyRepaymentHours))
+            debt = max(0, debt - repayment)
+            if day == lastDay { carriedDebt = debt }
+            debt = min(debtLimit, debt + max(0, target - hours))
+        }
+
+        func clockMinutes(_ date: Date) -> Double {
+            let parts = calendar.dateComponents([.hour, .minute, .second], from: date)
+            return Double((parts.hour ?? 0) * 60 + (parts.minute ?? 0)) + Double(parts.second ?? 0) / 60
+        }
+        func circularShift(_ a: Date, _ b: Date) -> Double {
+            let delta = abs(clockMinutes(a) - clockMinutes(b))
+            return min(delta, 24 * 60 - delta)
+        }
+        // Compare the longest main sleep on adjacent recorded dates. Do not bridge
+        // missing dates or penalize a stable daytime schedule for its clock time.
+        let representatives = days.compactMap { day -> (Date, MainSleep)? in
+            guard let main = dailyMains[day]?.max(by: {
+                $0.hours == $1.hours ? $0.end < $1.end : $0.hours < $1.hours
+            }) else { return nil }
+            return (day, main)
+        }
+        let shifts = zip(representatives, representatives.dropFirst()).compactMap { previous, current -> Double? in
+            guard calendar.date(byAdding: .day, value: 1, to: previous.0) == current.0 else { return nil }
+            return (circularShift(previous.1.start, current.1.start) + circularShift(previous.1.end, current.1.end)) / 2
+        }
+        let meanShift = shifts.count >= max(1, settings.minimumTimingPairs)
+            ? shifts.reduce(0, +) / Double(shifts.count) : nil
+        let regularity = meanShift.map { Int((100 * (1 - $0 / max(1, settings.irregularityFullScaleMinutes))).rounded()).clamped(to: 0...100) }
+        let sufficient = days.count >= max(1, settings.minimumRecordedDays)
+        // Today's shortage already affects the duration score. Only carried debt
+        // adds a penalty; excess sleep repays part of debt and cannot be banked.
+        let debtPenalty = sufficient ? max(0, settings.maximumDebtPenalty) * carriedDebt / debtLimit : 0
+        let timingPenalty = regularity.map { max(0, settings.maximumRegularityPenalty) * Double(100 - $0) / 100 } ?? 0
+        return SleepHistorySummary(windowStart: firstDay, asOf: latest.end, targetSleepHours: target,
+            windowDays: windowDays, recordedDays: days.count, debtHours: sufficient ? debt : nil,
+            carriedDebtHours: sufficient ? carriedDebt : nil, regularityScore: regularity,
+            timingShiftMinutes: meanShift, recoveryPenalty: debtPenalty + timingPenalty)
+    }
+}
+
 struct MorningRecoveryScorer {
+    var config: EnergyConfig = .default
+
     func assess(sleep: [DateInterval], hrv: [TimedHealthValue], heartRates: [TimedHealthValue],
                 now: Date, calendar: Calendar = .current) -> MorningRecovery? {
         let episodes = PhysiologyIntervals.mainSleeps(sleep, through: now)
@@ -359,10 +432,13 @@ struct MorningRecoveryScorer {
         let input = EnergyInput(heartRateBPM: current.1, heartRateVariabilityMS: current.0,
             restingHeartRateBPM: current.1, sleepHours: main.hours, activeEnergyKcal: 0,
             hrvBaselineMS: hrvBaseline, restingHeartRateBaselineBPM: heartBaseline)
+        let sleepHistory = SleepHistoryScorer(config: config).assess(sleep: sleep, now: now, calendar: calendar)
+        let baseScore = EnergyScorer(config: config).computeScores(input: input).recoveryScore
         return MorningRecovery(sleepStart: main.start, sleepEnd: main.end, sleepHours: main.hours,
             hrvMS: current.0, sleepingHeartRateBPM: current.1, hrvBaselineMS: hrvBaseline,
             heartRateBaselineBPM: heartBaseline, baselineNightCount: days.count,
-            score: EnergyScorer().computeScores(input: input).recoveryScore)
+            score: Int((Double(baseScore) - (sleepHistory?.recoveryPenalty ?? 0)).rounded()).clamped(to: 0...100),
+            sleepHistory: sleepHistory)
     }
 
     private func markers(for episode: MainSleep, hrv: [TimedHealthValue],

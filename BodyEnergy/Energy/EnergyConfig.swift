@@ -29,8 +29,22 @@ struct EnergyConfig: Sendable {
         var energyActivityBalance: Double = 0.12
     }
 
+    // Product estimates, not clinical sleep-debt or sleep-regularity measures.
+    struct SleepHistory: Sendable {
+        var windowDays = 7
+        var minimumRecordedDays = 3
+        var maximumDebtHours = 12.0
+        var surplusRepaymentFraction = 0.5
+        var maximumDailyRepaymentHours = 2.0
+        var minimumTimingPairs = 2
+        var irregularityFullScaleMinutes = 180.0
+        var maximumDebtPenalty = 12.0
+        var maximumRegularityPenalty = 6.0
+    }
+
     var baselines = Baselines()
     var weights = Weights()
+    var sleepHistory = SleepHistory()
 
     var sleepValidRange: ClosedRange<Double> = 0...16
     var hrvValidRange: ClosedRange<Double> = 5...220

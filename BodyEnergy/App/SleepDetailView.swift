@@ -13,6 +13,7 @@ struct SleepDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 summaryCard
+                if let history = health.sleepHistory { sleepHistoryCard(history) }
                 if let details = health.sleepDetails {
                     periodCard(details)
                     if !details.segments.isEmpty { segmentsCard(details) }
@@ -55,6 +56,32 @@ struct SleepDetailView: View {
                 .font(.caption)
                 .foregroundStyle(explanation.isStale ? Color.orange : Color.secondary)
         }
+        .sleepCard()
+    }
+
+    private func sleepHistoryCard(_ history: SleepHistorySummary) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("近 \(history.windowDays) 天睡眠趋势").font(.headline)
+            HStack {
+                Text("睡眠债估算")
+                Spacer()
+                Text(history.debtHours.map { "约 \(String(format: "%.1f", $0)) 小时" } ?? "记录积累中")
+                    .monospacedDigit()
+            }
+            HStack {
+                Text("作息规律估算")
+                Spacer()
+                Text(history.regularityScore.map { "\($0) / 100" } ?? "记录积累中")
+                    .monospacedDigit()
+            }
+            Text("已记录 \(history.recordedDays) / \(history.windowDays) 天 · 每日目标 \(String(format: "%.1f", history.targetSleepHours)) 小时")
+                .font(.caption).foregroundStyle(.secondary)
+            Text("至少 3 个有效日期估算睡眠债；作息规律需要相邻日期的入睡与醒来记录。小睡计入对应醒来日期，缺测日不按零睡眠计算。数值仅反映已记录的睡眠趋势。")
+                .font(.caption).foregroundStyle(.secondary)
+            Text("截至 \(AppDateTime.timestamp(history.asOf))")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .font(.subheadline)
         .sleepCard()
     }
 
